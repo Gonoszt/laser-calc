@@ -45,7 +45,7 @@ def save_gep_setting(gep_nev, adatok):
     if db:
         db.collection("beallitasok").document("gepek").set({gep_nev: adatok}, merge=True)
 
-st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
+st.set_page_config(page_title="Melus & SK Profi Kalkulátor", layout="wide")
 all_settings = load_all_settings()
 
 # --- MENÜ ---
