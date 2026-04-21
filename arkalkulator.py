@@ -44,7 +44,7 @@ def save_gep_setting(gep_nev, adatok):
     if db:
         db.collection("beallitasok").document("gepek").set({gep_nev: adatok}, merge=True)
 
-st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
+st.set_page_config(page_title="Melus & SK Profi Kalkulátor", layout="wide")
 all_settings = load_all_settings()
 
 # --- MENÜ ---
@@ -63,7 +63,7 @@ if page == "Költség Kalkulátor":
                 c1, c2, c3 = st.columns(3)
                 l_val = c1.number_input("Lézer amort. (Ft/p)", value=float(all_settings[gep_nev]["lazer"]), key=f"l{key_s}")
                 m_val = c2.number_input("Anyag (Ft/mm²)", value=float(all_settings[gep_nev]["material"]), format="%.5f", key=f"m{key_s}")
-                p_val = c3.number_input("Áram (Ft/p)", value=float(all_settings[gep_nev]["power"]), key=f"p{key_s}")
+                p_val = c3.number_input("Áram (Ft/p)", value=float(all_settings[gep_nev]["power"]), key=f"pw{key_s}")
                 if st.button(f"Mentés felhőbe ({gep_nev})", key=f"b{key_s}"):
                     save_gep_setting(gep_nev, {"lazer": l_val, "material": m_val, "power": p_val, "work": 25.0, "magnet": 0.0, "paint": 0.0})
                     st.success("Minden eszközön frissítve!")
@@ -76,7 +76,7 @@ if page == "Költség Kalkulátor":
                 height_mm = st.number_input("Magasság (mm)", value=100.0, key=f"h{key_s}")
                 work_time = st.number_input("Munkaidő (perc)", value=5.0, key=f"t{key_s}")
             with col_b:
-                pcs = st.number_input("Hány darab jön ki a táblából?", min_value=1, value=1, key=f"p{key_s}")
+                pcs = st.number_input("Hány darab jön ki a táblából?", min_value=1, value=1, key=f"pc{key_s}")
             
             # Kalkuláció (10% felárral)
             base_cost = (m_val * width_mm * height_mm) + ((l_val + p_val + 25.0) * work_time)
