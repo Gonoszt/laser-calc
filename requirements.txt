@@ -2,4 +2,4 @@ streamlit
 pandas
 svgpathtools
 google-cloud-firestore
-google-oauth2
+google-auth
