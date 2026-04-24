@@ -41,40 +41,28 @@ def load_all_settings():
         except: pass
     return defaults
 
-def save_gep_setting(gep_nev, adatok):
-    if db:
-        db.collection("beallitasok").document("gepek").set({gep_nev: adatok}, merge=True)
-
-st.set_page_config(page_title="Melus & SK Profi Kalkulátor", layout="wide")
-all_settings = load_all_settings()
-
-# --- MENÜ ---
-st.sidebar.title("Műhely Vezérlő")
-page = st.sidebar.radio("Választó:", ["Költség Kalkulátor", "SVG Időbecslő", "Archívum"])
-
-# --- 1. OLDAL: KALKULÁTOR ---
-if page == "Költség Kalkulátor":
-    st.title("🧮 Részletes Költség Kalkulátor")
-    tabs = st.tabs(["Kis Lézer", "Nagy Lézer", "3D Nyomtatás"])
-
-    def render_calc_tab(gep_nev, tab_obj, key_s):
+def render_calc_tab(gep_nev, tab_obj, key_s):
         with tab_obj:
-            # Alapárak szerkesztése (Expandable)
+            # Biztonsági mentés: ha a gép nem szerepel az adatbázisban, üres szótárt használunk
+            current_gep_data = all_settings.get(gep_nev, {})
+            
             with st.expander(f"⚙️ Alapárak és rezsi szerkesztése ({gep_nev})"):
                 c1, c2, c3 = st.columns(3)
-                l_val = c1.number_input("Lézer amort. (Ft/p)", value=float(all_settings[gep_nev].get("lazer", 0)), key=f"l{key_s}")
-                m_val = c2.number_input("Anyag alapár (Ft/mm²)", value=float(all_settings[gep_nev].get("material", 0)), format="%.5f", key=f"m{key_s}")
-                p_val = c3.number_input("Áram (Ft/p)", value=float(all_settings[gep_nev].get("power", 0)), key=f"pw{key_s}")
+                # Itt a .get() metódust használjuk alapértelmezett értékkel. A format segít a kis számoknál.
+                l_val = c1.number_input("Lézer amort. (Ft/p)", value=float(current_gep_data.get("lazer", 0.0)), key=f"l{key_s}", format="%.3f")
+                m_val = c2.number_input("Anyag alapár (Ft/mm²)", value=float(current_gep_data.get("material", 0.006)), format="%.5f", key=f"m{key_s}")
+                p_val = c3.number_input("Áram (Ft/p)", value=float(current_gep_data.get("power", 0.0)), key=f"pw{key_s}")
                 
                 c4, c5, c6 = st.columns(3)
-                w_val = c4.number_input("Munkadíj (Ft/p)", value=float(all_settings[gep_nev].get("work", 25)), key=f"w{key_s}")
-                mag_val = c5.number_input("Mágnes ára (Ft/db)", value=float(all_settings[gep_nev].get("magnet", 0)), key=f"mag{key_s}")
-                pai_val = c6.number_input("Festés/Koptatás (Ft/mm²)", value=float(all_settings[gep_nev].get("paint", 0)), format="%.5f", key=f"pai{key_s}")
+                w_val = c4.number_input("Munkadíj (Ft/p)", value=float(current_gep_data.get("work", 25.0)), key=f"w{key_s}")
+                mag_val = c5.number_input("Mágnes ára (Ft/db)", value=float(current_gep_data.get("magnet", 0.0)), key=f"mag{key_s}")
+                pai_val = c6.number_input("Festés/Koptatás (Ft/mm²)", value=float(current_gep_data.get("paint", 0.0)), format="%.5f", key=f"pai{key_s}")
                 
                 if st.button(f"Mentés minden eszközre ({gep_nev})", key=f"btn_save_{key_s}"):
                     new_set = {"lazer": l_val, "material": m_val, "power": p_val, "work": w_val, "magnet": mag_val, "paint": pai_val}
                     save_gep_setting(gep_nev, new_set)
-                    st.success("Szinkronizálva!")
+                    st.success(f"Sikeres mentés: {gep_nev} szinkronizálva!")
+                    st.rerun() # Frissítjük az oldalt a mentés után
 
             st.divider()
             
@@ -113,11 +101,7 @@ if page == "Költség Kalkulátor":
                         "termek": t_name,
                         "ar": round(unit_price)
                     })
-                    st.success("Archiválva!")
-
-    render_calc_tab("Kis Lézer", tabs[0], "kis")
-    render_calc_tab("Nagy Lézer", tabs[1], "nagy")
-    render_calc_tab("3D Nyomtatás", tabs[2], "3d")
+                    st.success(f"{t_name} elmentve az archívumba!")
 
 # --- 2. OLDAL: SVG IDŐBECSLŐ ---
 elif page == "SVG Időbecslő":
