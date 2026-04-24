@@ -31,7 +31,6 @@ db = get_db_client()
 
 # --- BEÁLLÍTÁSOK KEZELÉSE ---
 def load_all_settings():
-    # Alapértelmezett értékek, ha az adatbázis üres vagy hiba történik
     defaults = {
         "Kis Lézer": {"lazer": 0.8, "material": 0.005, "power": 4.6, "work": 25.0, "magnet": 150.0, "paint": 0.002},
         "Nagy Lézer": {"lazer": 1.5, "material": 0.005, "power": 5.5, "work": 25.0, "magnet": 0.0, "paint": 0.0},
@@ -50,7 +49,7 @@ def save_gep_setting(gep_nev, adatok):
     if db:
         db.collection("beallitasok").document("gepek").set({gep_nev: adatok}, merge=True)
 
-st.set_page_config(page_title="Melus & SK Profi Kalkulátor", layout="wide")
+st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
 all_settings = load_all_settings()
 
 # --- MENÜ ---
@@ -64,7 +63,6 @@ if page == "Költség Kalkulátor":
 
     def render_calc_tab(gep_nev, tab_obj, key_s):
         with tab_obj:
-            # Biztonsági adatlekérés: ha a gép nem szerepel az adatbázisban, üres szótárat használ
             current_gep_data = all_settings.get(gep_nev, {})
             
             with st.expander(f"⚙️ Alapárak és rezsi szerkesztése ({gep_nev})"):
@@ -76,7 +74,7 @@ if page == "Költség Kalkulátor":
                 c4, c5, c6 = st.columns(3)
                 w_val = c4.number_input("Munkadíj (Ft/p)", value=float(current_gep_data.get("work", 25.0)), key=f"w{key_s}")
                 mag_val = c5.number_input("Mágnes ára (Ft/db)", value=float(current_gep_data.get("magnet", 0.0)), key=f"mag{key_s}")
-                pai_val = c6.number_input("Festés/Koptatás (Ft/mm²)", value=float(current_gep_data.get("paint", 0.0)), format="%.5f", key=f"pai{key_s}")
+                pai_val = c6.number_input("Festés egységár (Ft/mm²)", value=float(current_gep_data.get("paint", 0.0)), format="%.5f", key=f"pai{key_s}")
                 
                 if st.button(f"Mentés minden eszközre ({gep_nev})", key=f"btn_save_{key_s}"):
                     new_set = {"lazer": l_val, "material": m_val, "power": p_val, "work": w_val, "magnet": mag_val, "paint": pai_val}
@@ -97,14 +95,23 @@ if page == "Költség Kalkulátor":
                 pcs = st.number_input("Darabszám a táblán", min_value=1, value=1, key=f"pcs{key_s}")
                 use_magnet = st.checkbox("Mágnes kell rá?", key=f"umag{key_s}")
                 use_paint = st.checkbox("Festés / Koptatás kell?", key=f"upai{key_s}")
+                
+                # Dinamikus szorzó mező a festéshez
+                paint_multiplier = 1
+                if use_paint:
+                    paint_multiplier = st.number_input("Festés szorzó (pl. réteg vagy darab)", min_value=1, value=1, step=1, key=f"paimult{key_s}")
 
             # Költségszámítás
             area = width * height
             cost_material = area * m_val
             cost_machine = (l_val + p_val + w_val) * runtime
+            
             cost_extra = 0
-            if use_magnet: cost_extra += mag_val
-            if use_paint: cost_extra += (area * pai_val)
+            if use_magnet: 
+                cost_extra += mag_val
+            if use_paint: 
+                # Terület * Egységár * Megadott szorzó
+                cost_extra += (area * pai_val * paint_multiplier)
             
             total_netto = (cost_material + cost_machine + cost_extra)
             total_with_margin = total_netto * 1.10 # 10% felár
@@ -155,7 +162,7 @@ elif page == "SVG Időbecslő":
                     if unit == 'cm': p_w *= 10
                     elif unit == 'pt': p_w *= 0.3527
                     scaling = p_w / float(vb_match.group(1))
-                    st.caption(f"📏 Automatikus skálázás: {round(scaling, 4)}x")
+                    st.caption(f"📏 Skálázás: {round(scaling, 4)}x")
             except: pass
 
             css_map = {}
@@ -221,4 +228,4 @@ elif page == "Archívum":
             else:
                 st.info("Még nincsenek mentett kalkulációk.")
         except Exception as e:
-            st.warning("Még nincs adat az adatbázisban, vagy a lekérdezés sikertelen.")
+            st.warning("Még nincs adat az adatbázisban.")
