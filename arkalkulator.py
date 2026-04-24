@@ -6,7 +6,7 @@ from datetime import datetime
 from google.cloud import firestore
 from google.oauth2 import service_account
 
-# SVG elemzéshez szükséges könyvtár
+# --- SVG elemzéshez szükséges könyvtár ---
 try:
     from svgpathtools import svg2paths
 except ImportError:
@@ -15,9 +15,13 @@ except ImportError:
 # --- ADATBÁZIS KAPCSOLAT (Firestore) ---
 def get_db_client():
     if "gcp_service_account" in st.secrets:
-        info = json.loads(st.secrets["gcp_service_account"])
-        credentials = service_account.Credentials.from_service_account_info(info)
-        return firestore.Client(credentials=credentials)
+        try:
+            info = json.loads(st.secrets["gcp_service_account"])
+            credentials = service_account.Credentials.from_service_account_info(info)
+            return firestore.Client(credentials=credentials)
+        except Exception as e:
+            st.error(f"Firestore hiba: {e}")
+            return None
     try:
         return firestore.Client.from_service_account_json("firebase_kulcs.json")
     except:
@@ -27,7 +31,7 @@ db = get_db_client()
 
 # --- BEÁLLÍTÁSOK KEZELÉSE ---
 def load_all_settings():
-    # Alapértelmezett értékek, ha az adatbázis üres
+    # Alapértelmezett értékek, ha az adatbázis üres vagy hiba történik
     defaults = {
         "Kis Lézer": {"lazer": 0.8, "material": 0.005, "power": 4.6, "work": 25.0, "magnet": 150.0, "paint": 0.002},
         "Nagy Lézer": {"lazer": 1.5, "material": 0.005, "power": 5.5, "work": 25.0, "magnet": 0.0, "paint": 0.0},
@@ -38,17 +42,33 @@ def load_all_settings():
             doc = db.collection("beallitasok").document("gepek").get()
             if doc.exists:
                 return doc.to_dict()
-        except: pass
+        except Exception:
+            pass
     return defaults
 
-def render_calc_tab(gep_nev, tab_obj, key_s):
+def save_gep_setting(gep_nev, adatok):
+    if db:
+        db.collection("beallitasok").document("gepek").set({gep_nev: adatok}, merge=True)
+
+st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
+all_settings = load_all_settings()
+
+# --- MENÜ ---
+st.sidebar.title("Műhely Vezérlő")
+page = st.sidebar.radio("Választó:", ["Költség Kalkulátor", "SVG Időbecslő", "Archívum"])
+
+# --- 1. OLDAL: KALKULÁTOR ---
+if page == "Költség Kalkulátor":
+    st.title("🧮 Részletes Költség Kalkulátor")
+    tabs = st.tabs(["Kis Lézer", "Nagy Lézer", "3D Nyomtatás"])
+
+    def render_calc_tab(gep_nev, tab_obj, key_s):
         with tab_obj:
-            # Biztonsági mentés: ha a gép nem szerepel az adatbázisban, üres szótárt használunk
+            # Biztonsági adatlekérés: ha a gép nem szerepel az adatbázisban, üres szótárat használ
             current_gep_data = all_settings.get(gep_nev, {})
             
             with st.expander(f"⚙️ Alapárak és rezsi szerkesztése ({gep_nev})"):
                 c1, c2, c3 = st.columns(3)
-                # Itt a .get() metódust használjuk alapértelmezett értékkel. A format segít a kis számoknál.
                 l_val = c1.number_input("Lézer amort. (Ft/p)", value=float(current_gep_data.get("lazer", 0.0)), key=f"l{key_s}", format="%.3f")
                 m_val = c2.number_input("Anyag alapár (Ft/mm²)", value=float(current_gep_data.get("material", 0.006)), format="%.5f", key=f"m{key_s}")
                 p_val = c3.number_input("Áram (Ft/p)", value=float(current_gep_data.get("power", 0.0)), key=f"pw{key_s}")
@@ -62,11 +82,10 @@ def render_calc_tab(gep_nev, tab_obj, key_s):
                     new_set = {"lazer": l_val, "material": m_val, "power": p_val, "work": w_val, "magnet": mag_val, "paint": pai_val}
                     save_gep_setting(gep_nev, new_set)
                     st.success(f"Sikeres mentés: {gep_nev} szinkronizálva!")
-                    st.rerun() # Frissítjük az oldalt a mentés után
+                    st.rerun()
 
             st.divider()
             
-            # Aktuális számítás
             col_a, col_b = st.columns(2)
             with col_a:
                 t_name = st.text_input("Termék neve", key=f"tn{key_s}")
@@ -88,7 +107,7 @@ def render_calc_tab(gep_nev, tab_obj, key_s):
             if use_paint: cost_extra += (area * pai_val)
             
             total_netto = (cost_material + cost_machine + cost_extra)
-            total_with_margin = total_netto * 1.10 # 10% haszon
+            total_with_margin = total_netto * 1.10 # 10% felár
             unit_price = total_with_margin / pcs
 
             st.subheader(f"💰 Javasolt eladási ár: {round(unit_price)} Ft / db")
@@ -101,7 +120,11 @@ def render_calc_tab(gep_nev, tab_obj, key_s):
                         "termek": t_name,
                         "ar": round(unit_price)
                     })
-                    st.success(f"{t_name} elmentve az archívumba!")
+                    st.success(f"{t_name} archiválva!")
+
+    render_calc_tab("Kis Lézer", tabs[0], "kis")
+    render_calc_tab("Nagy Lézer", tabs[1], "nagy")
+    render_calc_tab("3D Nyomtatás", tabs[2], "3d")
 
 # --- 2. OLDAL: SVG IDŐBECSLŐ ---
 elif page == "SVG Időbecslő":
@@ -110,14 +133,13 @@ elif page == "SVG Időbecslő":
     col1, col2 = st.columns([1, 2])
     with col1:
         v_raster = st.number_input("Fekete sebesség (Raszter) [mm/s]", value=300)
-        dpi = st.number_input("Felbontás (DPI)", value=254, help="254 DPI = 0.1mm sorköz")
+        dpi = st.number_input("Felbontás (DPI)", value=254)
         scan_gap_mm = 25.4 / dpi if dpi > 0 else 0.1
         st.caption(f"Kalkulált sorköz: {round(scan_gap_mm, 4)} mm")
         
         st.divider()
         v_blue = st.number_input("Kék sebesség (Vektor) [mm/s]", value=25)
         v_red = st.number_input("Piros sebesség (Vektor) [mm/s]", value=20)
-        
         uploaded_file = st.file_uploader("Válassz SVG fájlt", type=["svg"])
 
     with col2:
@@ -133,7 +155,7 @@ elif page == "SVG Időbecslő":
                     if unit == 'cm': p_w *= 10
                     elif unit == 'pt': p_w *= 0.3527
                     scaling = p_w / float(vb_match.group(1))
-                    st.caption(f"📏 Skálázás: {round(scaling, 4)}x")
+                    st.caption(f"📏 Automatikus skálázás: {round(scaling, 4)}x")
             except: pass
 
             css_map = {}
@@ -176,23 +198,27 @@ elif page == "SVG Időbecslő":
 
                 st.success(f"✅ Becsült idő: {round(total, 2)} perc")
                 st.metric("Összesen", f"{round(total, 2)} p")
-                st.text_area("Vágólapra (perc):", value=str(round(total, 2)))
                 
                 c1, c2, c3 = st.columns(3)
                 c1.write(f"Kék: {round(b_len)}mm")
                 c2.write(f"Piros: {round(r_len)}mm")
                 c3.write(f"Raszter: {round(t_rast, 2)}p")
             except Exception as e:
-                st.error(f"Hiba: {e}")
+                st.error(f"Hiba az SVG elemzésekor: {e}")
 
 # --- 3. OLDAL: ARCHÍVUM ---
 elif page == "Archívum":
-    st.title("📁 Felhő alapú Archívum")
+    st.title("📁 Központi Archívum")
     if db:
-        docs = db.collection("kalkulaciok").order_by("datum", direction=firestore.Query.DESCENDING).limit(50).stream()
-        res = []
-        for d in docs:
-            v = d.to_dict()
-            res.append([v['datum'].strftime("%Y-%m-%d %H:%M"), v['gep'], v['termek'], f"{v['ar']} Ft"])
-        if res:
-            st.table(pd.DataFrame(res, columns=["Dátum", "Gép", "Termék", "Darabár"]))
+        try:
+            docs = db.collection("kalkulaciok").order_by("datum", direction=firestore.Query.DESCENDING).limit(50).stream()
+            res = []
+            for d in docs:
+                v = d.to_dict()
+                res.append([v.get('datum').strftime("%Y-%m-%d %H:%M"), v.get('gep'), v.get('termek'), f"{v.get('ar')} Ft"])
+            if res:
+                st.table(pd.DataFrame(res, columns=["Dátum", "Gép", "Termék", "Darabár"]))
+            else:
+                st.info("Még nincsenek mentett kalkulációk.")
+        except Exception as e:
+            st.warning("Még nincs adat az adatbázisban, vagy a lekérdezés sikertelen.")
