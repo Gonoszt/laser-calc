@@ -16,11 +16,14 @@ except ImportError:
 def get_db_client():
     if "project_id" in st.secrets:
         try:
+            # Összerakjuk a privát kulcsot a két darabból és javítjuk a sortöréseket
+            full_private_key = (st.secrets["pk_part1"] + st.secrets["pk_part2"]).replace("\\n", "\n")
+            
             info = {
                 "type": st.secrets["type"],
                 "project_id": st.secrets["project_id"],
-                "private_key_id": st.secrets["private_key_id"],
-                "private_key": st.secrets["private_key"].replace("\\n", "\n"),
+                "private_key_id": st.secrets.get("project_id_key", "7f6de1835b9aba0b30298ee11e51aeb67665f198"),
+                "private_key": full_private_key,
                 "client_email": st.secrets["client_email"],
                 "client_id": st.secrets["client_id"],
                 "auth_uri": st.secrets["auth_uri"],
