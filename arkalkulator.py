@@ -70,7 +70,13 @@ if "gtime" in query_params:
 
 # --- MENÜ ÉS ADMIN VEZÉRLÉS AZ OLDALSÁVBAN ---
 st.sidebar.title("Műhely Vezérlő")
-page = st.sidebar.radio("Választó:", ["Költség Kalkulátor", "SVG Időbecslő", "Archívum"])
+
+# Menüpontok összeállítása a bejelentkezési állapottal függően
+menu_options = ["Költség Kalkulátor", "SVG Időbecslő"]
+if st.session_state.logged_in:
+    menu_options.append("Archívum")
+
+page = st.sidebar.radio("Választó:", menu_options)
 
 st.sidebar.divider()
 st.sidebar.subheader("🔒 Adminisztráció")
@@ -98,9 +104,9 @@ if page == "Költség Kalkulátor":
         with tab_obj:
             current_gep_data = all_settings.get(gep_nev, {})
             
-            # Alapárak szerkesztése - CSAK ADMINNAK
-            with st.expander(f"⚙️ Alapárak és rezsi szerkesztése ({gep_nev}) - (Csak admin)"):
-                if st.session_state.logged_in:
+            # Alapárak szerkesztése - CSAK BEJELENTKEZVE LÁTSZIK ÉS MÓDOSÍTHATÓ
+            if st.session_state.logged_in:
+                with st.expander(f"⚙️ Alapárak és rezsi szerkesztése ({gep_nev})"):
                     c1, c2, c3 = st.columns(3)
                     l_val = c1.number_input("Lézer amort. (Ft/p)", value=float(current_gep_data.get("lazer", 0.0)), key=f"l{key_s}", format="%.3f")
                     m_val = c2.number_input("Anyag alapár (Ft/mm²)", value=float(current_gep_data.get("material", 0.006)), format="%.5f", key=f"m{key_s}")
@@ -116,13 +122,9 @@ if page == "Költség Kalkulátor":
                         save_gep_setting(gep_nev, new_set)
                         st.success(f"Sikeres mentés: {gep_nev} szinkronizálva!")
                         st.rerun()
-                else:
-                    st.warning("⚠️ Az alapértékek módosításához jelentkezz be az oldalsávban admin jelszóval!")
-                    st.json(current_gep_data)
-
-            st.divider()
+                st.divider()
             
-            # Aktuális értékek a számításhoz
+            # Aktuális értékek a számításhoz a háttérből (bejelentkezés nélkül is fut a számítás, de az adatok rejtve maradnak)
             m_val = float(current_gep_data.get("material", 0.006))
             l_val = float(current_gep_data.get("lazer", 0.0))
             p_val = float(current_gep_data.get("power", 0.0))
@@ -135,8 +137,6 @@ if page == "Költség Kalkulátor":
                 t_name = st.text_input("Termék neve", key=f"tn{key_s}")
                 width = st.number_input("Szélesség (mm)", value=100.0, key=f"width{key_s}")
                 height = st.number_input("Magasság (mm)", value=100.0, key=f"height{key_s}")
-                
-                # Ha érkezett idő az SVG kalkulátorból, azt írjuk be alapértelmezettként
                 runtime = st.number_input("Gépidő (perc)", value=float(default_gtime), key=f"time{key_s}")
             
             with col_b:
@@ -161,25 +161,27 @@ if page == "Költség Kalkulátor":
             
             total_netto = (cost_material + cost_machine + cost_extra)
             total_with_margin = total_netto * 1.10 # 10% felár
-            unit_price = total_with_margin / pcs
+            calculated_unit_price = round(total_with_margin / pcs)
 
-            st.subheader(f"💰 Javasolt eladási ár: {round(unit_price)} Ft / db")
+            st.subheader(f"💰 Javasolt eladási ár: {calculated_unit_price} Ft / db")
             
-            # Mentés az archívumba - CSAK ADMINNAK
-            if st.session_state.logged_in:
-                if st.button("💾 Mentés az Archívumba", key=f"final_save_{key_s}", use_container_width=True):
-                    if db and t_name:
-                        db.collection("kalkulaciok").add({
-                            "datum": datetime.now(),
-                            "gep": gep_nev,
-                            "termek": t_name,
-                            "ar": round(unit_price)
-                        })
-                        st.success(f"{t_name} archiválva!")
-                    else:
-                        st.error("Add meg a termék nevét a mentéshez!")
-            else:
-                st.info("💡 Az eredmények archiválásához jelentkezz be az oldalsávban.")
+            # ÚJ MEZŐ: Kiajánlott ár megadása
+            suggested_price = st.number_input("Kiajánlott ár (Ft / db)", value=int(calculated_unit_price), key=f"sugprice{key_s}")
+
+            # Mentés az archívumba - Bárki által beküldhető, de az archívumot csak admin látja
+            if st.button("💾 Mentés az Archívumba", key=f"final_save_{key_s}", use_container_width=True):
+                if db and t_name:
+                    db.collection("kalkulaciok").add({
+                        "datum": datetime.now(),
+                        "gep": gep_nev,
+                        "termek": t_name,
+                        "darabszam": pcs,
+                        "szamitott_ar": calculated_unit_price,
+                        "kiajanlott_ar": suggested_price
+                    })
+                    st.success(f"'{t_name}' sikeresen archiválva!")
+                else:
+                    st.error("Add meg a termék nevét a mentéshez!")
 
     render_calc_tab("Kis Lézer", tabs[0], "kis")
     render_calc_tab("Nagy Lézer", tabs[1], "nagy")
@@ -265,25 +267,42 @@ elif page == "SVG Időbecslő":
                 c3.write(f"Raszter: {round(t_rast, 2)}p")
 
                 st.divider()
-                # Gomb, ami visszairányít a kalkulátor oldalra a kiszámolt idővel
                 st.link_button("✅ IDŐ ÁTVÉTELE A KALKULÁTORBA", f"/?gtime={total_rounded}")
             except Exception as e:
                 st.error(f"Hiba az SVG elemzésekor: {e}")
 
-# --- 3. OLDAL: ARCHÍVUM ---
-elif page == "Archívum":
+# --- 3. OLDAL: ARCHÍVUM (Csak admin látja) ---
+elif page == "Archívum" and st.session_state.logged_in:
     st.title("📁 Központi Archívum")
     if db:
         try:
-            docs = db.collection("kalkulaciok").order_by("datum", direction=firestore.Query.DESCENDING).limit(50).stream()
+            docs = db.collection("kalkulaciok").order_by("datum", direction=firestore.Query.DESCENDING).limit(100).stream()
             res = []
             for d in docs:
                 v = d.to_dict()
                 dt_val = v.get('datum')
                 dt_str = dt_val.strftime("%Y-%m-%d %H:%M") if hasattr(dt_val, 'strftime') else str(dt_val)
-                res.append([dt_str, v.get('gep'), v.get('termek'), f"{v.get('ar')} Ft"])
+                res.append({
+                    "Dátum": dt_str,
+                    "Gép": v.get('gep'),
+                    "Termék": v.get('termek'),
+                    "Darabszám": v.get('darabszam', 1),
+                    "Számított Ár (Ft/db)": v.get('szamitott_ar', v.get('ar', 0)),
+                    "Kiajánlott Ár (Ft/db)": v.get('kiajanlott_ar', v.get('ar', 0))
+                })
             if res:
-                st.table(pd.DataFrame(res, columns=["Dátum", "Gép", "Termék", "Darabár"]))
+                df_arch = pd.DataFrame(res)
+                st.dataframe(df_arch, use_container_width=True)
+
+                # Exportálás CSV-be
+                csv_data = df_arch.to_csv(index=False, encoding="utf-8-sig")
+                st.download_button(
+                    label="📥 Archívum letöltése CSV-ben",
+                    data=csv_data,
+                    file_name=f"kalkulacio_archivum_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+                    mime="text/csv",
+                    use_container_width=True
+                )
             else:
                 st.info("Még nincsenek mentett kalkulációk.")
         except Exception as e:
