@@ -14,29 +14,17 @@ except ImportError:
 
 # --- ADATBÁZIS KAPCSOLAT (Firestore) ---
 def get_db_client():
-    if "gcp_service_account" in st.secrets:
+    if "gcp_json" in st.secrets:
         try:
-            sec_val = st.secrets["gcp_service_account"]
-            
-            # Ha a secrets.toml-ben [gcp_service_account] táblaként van definiálva:
-            if hasattr(sec_val, "items"):
-                info = dict(sec_val)
-            else:
-                info = json.loads(sec_val)
-            
-            if "private_key" in info:
-                # Biztosítjuk, hogy a \n valódi sortöréssé alakuljon
-                info["private_key"] = info["private_key"].replace("\\n", "\n")
-
+            # Beolvesszük a teljes JSON-t egyetlen stringként, és dekódoljuk
+            raw_json = st.secrets["gcp_json"]
+            info = json.loads(raw_json)
             credentials = service_account.Credentials.from_service_account_info(info)
             return firestore.Client(credentials=credentials)
         except Exception as e:
             st.error(f"Firestore hiba: {e}")
             return None
-    try:
-        return firestore.Client.from_service_account_json("firebase_kulcs.json")
-    except:
-        return None
+    return None
 
 db = get_db_client()
 
