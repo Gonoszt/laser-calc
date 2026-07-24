@@ -17,14 +17,15 @@ def get_db_client():
     if "gcp_service_account" in st.secrets:
         try:
             sec_val = st.secrets["gcp_service_account"]
-            # Ha stringként adták meg a secrets-ben, betöltjük JSON-ként
-            if isinstance(sec_val, str):
-                info = json.loads(sec_val)
-            else:
-                info = dict(sec_val)
             
-            # Kulcs formázási hibák javítása (ha elcsúsztak a \n karakterek)
+            # Ha a secrets.toml-ben [gcp_service_account] táblaként van definiálva:
+            if hasattr(sec_val, "items"):
+                info = dict(sec_val)
+            else:
+                info = json.loads(sec_val)
+            
             if "private_key" in info:
+                # Biztosítjuk, hogy a \n valódi sortöréssé alakuljon
                 info["private_key"] = info["private_key"].replace("\\n", "\n")
 
             credentials = service_account.Credentials.from_service_account_info(info)
