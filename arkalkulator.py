@@ -16,8 +16,9 @@ except ImportError:
 def get_db_client():
     if "project_id" in st.secrets:
         try:
-            # Összefűzzük a listaelemeket valódi sortörésekkel
-            full_private_key = "\n".join(st.secrets["private_key_lines"])
+            # Megtisztítjuk a sorokat a felesleges szóközöktől
+            cleaned_lines = [line.strip() for line in st.secrets["private_key_lines"]]
+            full_private_key = "\n".join(cleaned_lines)
             
             info = {
                 "type": st.secrets["type"],
