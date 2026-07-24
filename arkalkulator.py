@@ -16,7 +16,17 @@ except ImportError:
 def get_db_client():
     if "gcp_service_account" in st.secrets:
         try:
-            info = json.loads(st.secrets["gcp_service_account"])
+            sec_val = st.secrets["gcp_service_account"]
+            # Ha stringként adták meg a secrets-ben, betöltjük JSON-ként
+            if isinstance(sec_val, str):
+                info = json.loads(sec_val)
+            else:
+                info = dict(sec_val)
+            
+            # Kulcs formázási hibák javítása (ha elcsúsztak a \n karakterek)
+            if "private_key" in info:
+                info["private_key"] = info["private_key"].replace("\\n", "\n")
+
             credentials = service_account.Credentials.from_service_account_info(info)
             return firestore.Client(credentials=credentials)
         except Exception as e:
