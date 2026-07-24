@@ -16,14 +16,12 @@ except ImportError:
 def get_db_client():
     if "gcp_json" in st.secrets:
         try:
-            raw_json = st.secrets["gcp_json"]
-            info = json.loads(raw_json)
-            
-            if "private_key" in info:
-                pk = info["private_key"]
-                # Itt a lényeg: javítjuk a duplázott vagy hibás sortöréseket
-                pk = pk.replace("\\\\n", "\n").replace("\\n", "\n")
-                info["private_key"] = pk
+            sec_val = st.secrets["gcp_json"]
+            # Ha táblaként (dict-szerűen) érkezik a TOML-ből:
+            if hasattr(sec_val, "items"):
+                info = dict(sec_val)
+            else:
+                info = json.loads(sec_val)
 
             credentials = service_account.Credentials.from_service_account_info(info)
             return firestore.Client(credentials=credentials)
@@ -31,7 +29,6 @@ def get_db_client():
             st.error(f"Firestore hiba: {e}")
             return None
     return None
-
 db = get_db_client()
 
 st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
