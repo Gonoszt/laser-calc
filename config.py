@@ -1,5 +1,4 @@
 import streamlit as st
-import json
 from google.cloud import firestore
 from google.oauth2 import service_account
 
@@ -8,20 +7,9 @@ def get_admin_password():
 
 def get_db_client():
     try:
-        # Megnézzük, hogy létezik-e a gcp_json a secrets-ben
+        # Ha a gcp_json teljes egésze szótárként vagy TOML táblaként érkezik be
         if "gcp_json" in st.secrets:
-            raw_gcp = st.secrets["gcp_json"]
-            
-            # Ha a Streamlit már szótárként adta át
-            if isinstance(raw_gcp, dict):
-                info = raw_gcp
-            # Ha szöveges/JSON formátumú stringként érkezett
-            elif isinstance(raw_gcp, str):
-                info = json.loads(raw_gcp)
-            else:
-                # Ha valamilyen Streamlit Secret proxy objektum
-                info = dict(raw_gcp)
-                
+            info = dict(st.secrets["gcp_json"])
         elif "project_id" in st.secrets:
             info = {
                 "type": st.secrets.get("type"),
@@ -37,10 +25,10 @@ def get_db_client():
                 "universe_domain": st.secrets.get("universe_domain", "googleapis.com")
             }
         else:
-            st.error("Nincs megfelelő adatbázis konfiguráció a Secrets-ben!")
+            st.error("Nincs adatbázis konfiguráció a Secrets-ben!")
             return None
 
-        # A privát kulcsban lévő escaped sorjelek kezelése
+        # Privát kulcs sorszüneteinek helyreállítása, ha szükséges
         if "private_key" in info and info["private_key"]:
             info["private_key"] = info["private_key"].replace("\\n", "\n")
 
