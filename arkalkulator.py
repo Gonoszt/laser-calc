@@ -14,19 +14,21 @@ except ImportError:
 
 # --- ADATBÁZIS KAPCSOLAT (Firestore) ---
 def get_db_client():
-    if "gcp_json" in st.secrets:
+    if "project_id" in st.secrets:
         try:
-            raw_json = st.secrets["gcp_json"]
-            # Ha esetleg dict-ként vagy stringként érkezne
-            if hasattr(raw_json, "items"):
-                info = dict(raw_json)
-            else:
-                info = json.loads(raw_json)
-            
-            if "private_key" in info:
-                # Biztosítjuk a sortörések helyes feloldását
-                info["private_key"] = info["private_key"].replace("\\n", "\n")
-
+            info = {
+                "type": st.secrets["type"],
+                "project_id": st.secrets["project_id"],
+                "private_key_id": st.secrets["private_key_id"],
+                "private_key": st.secrets["private_key"],
+                "client_email": st.secrets["client_email"],
+                "client_id": st.secrets["client_id"],
+                "auth_uri": st.secrets["auth_uri"],
+                "token_uri": st.secrets["token_uri"],
+                "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
+                "client_x509_cert_url": st.secrets["client_x509_cert_url"],
+                "universe_domain": st.secrets.get("universe_domain", "googleapis.com")
+            }
             credentials = service_account.Credentials.from_service_account_info(info)
             return firestore.Client(credentials=credentials)
         except Exception as e:
@@ -174,19 +176,26 @@ if page == "Költség Kalkulátor":
             # Kiajánlott ár alapértelmezetten a kalkulált árat jeleníti meg
             suggested_price = st.number_input("Kiajánlott ár (Ft / db)", value=int(calculated_unit_price), key=f"sugg_{key_s}")
 
-            if st.button("Mentés az Archívumba", key=f"final_save_{key_s}", use_container_width=True):
-                if db and t_name:
-                    db.collection("kalkulaciok").add({
-                        "datum": datetime.now(),
-                        "gep": gep_nev,
-                        "termek": t_name,
-                        "darabszam": pcs,
-                        "szamitott_ar": calculated_unit_price,
-                        "kiajanlott_ar": suggested_price
-                    })
-                    st.success(f"'{t_name}' sikeresen archiválva!")
-                else:
-                    st.error("Add meg a termék nevét a mentéshez!")
+            # Mentés gomb CSAK bejelentkezve látszik
+            if st.session_state.logged_in:
+                if st.button("Mentés az Archívumba", key=f"final_save_{key_s}", use_container_width=True):
+                    if not db:
+                        st.error("Nincs kapcsolat az adatbázissal! (Ellenőrizd a Streamlit Secrets-et)")
+                    elif not t_name or not t_name.strip():
+                        st.error("Add meg a termék nevét a mentéshez!")
+                    else:
+                        try:
+                            db.collection("kalkulaciok").add({
+                                "datum": datetime.now(),
+                                "gep": gep_nev,
+                                "termek": t_name.strip(),
+                                "darabszam": pcs,
+                                "szamitott_ar": calculated_unit_price,
+                                "kiajanlott_ar": suggested_price
+                            })
+                            st.success(f"'{t_name.strip()}' sikeresen archiválva!")
+                        except Exception as e:
+                            st.error(f"Hiba történt a mentés során: {e}")
 
     render_calc_tab("Kis Lézer", tabs[0], "kis")
     render_calc_tab("Nagy Lézer", tabs[1], "nagy")
