@@ -6,20 +6,25 @@ from datetime import datetime
 from google.cloud import firestore
 from google.oauth2 import service_account
 
-import streamlit as st
-import json
-from google.oauth2 import service_account
-from google.cloud import firestore
+# --- SVG elemzéshez szükséges könyvtár ---
+try:
+    from svgpathtools import svg2paths
+except ImportError:
+    st.error("Hiányzó csomag! A requirements.txt-be írd bele: svgpathtools")
 
-# --- ADATBÁZIS KAPCSOLAT ---
+# --- ADATBÁZIS KAPCSOLAT (Firestore) ---
 def get_db_client():
     if "gcp_json" in st.secrets:
         try:
             raw_json = st.secrets["gcp_json"]
-            info = json.loads(raw_json)
+            # Ha esetleg dict-ként vagy stringként érkezne
+            if hasattr(raw_json, "items"):
+                info = dict(raw_json)
+            else:
+                info = json.loads(raw_json)
             
             if "private_key" in info:
-                # Javítjuk a sortöréseket
+                # Biztosítjuk a sortörések helyes feloldását
                 info["private_key"] = info["private_key"].replace("\\n", "\n")
 
             credentials = service_account.Credentials.from_service_account_info(info)
@@ -28,6 +33,7 @@ def get_db_client():
             st.error(f"Firestore hiba: {e}")
             return None
     return None
+
 db = get_db_client()
 
 st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
@@ -161,7 +167,7 @@ if page == "Költség Kalkulátor":
 
             total_netto = (cost_material + cost_machine + cost_extra)
             total_with_margin = total_netto * 1.10  # 10% felár
-            calculated_unit_price = round(total_with_margin / pcs)
+            calculated_unit_price = round(total_with_margin / pcs) if pcs > 0 else 0
 
             st.subheader(f"Javasolt eladási ár: {calculated_unit_price} Ft / db")
 
