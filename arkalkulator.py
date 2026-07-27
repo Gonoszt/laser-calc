@@ -35,7 +35,6 @@ def get_db_client():
             st.error(f"Firestore hiba: {e}")
             return None
     return None
-    return None
 
 db = get_db_client()
 
