@@ -1,10 +1,9 @@
 import streamlit as st
 import pandas as pd
 import re
-import json
 from datetime import datetime
 from google.cloud import firestore
-from google.oauth2 import service_account
+from config import get_db_client, get_admin_password
 
 # --- SVG elemzéshez szükséges könyvtár ---
 try:
@@ -12,36 +11,11 @@ try:
 except ImportError:
     st.error("Hiányzó csomag! A requirements.txt-be írd bele: svgpathtools")
 
-# --- ADATBÁZIS KAPCSOLAT (Firestore) ---
-def get_db_client():
-    if "project_id" in st.secrets:
-        try:
-            info = {
-                "type": st.secrets["type"],
-                "project_id": st.secrets["project_id"],
-                "private_key_id": st.secrets["private_key_id"],
-                "private_key": st.secrets["private_key"],
-                "client_email": st.secrets["client_email"],
-                "client_id": st.secrets["client_id"],
-                "auth_uri": st.secrets["auth_uri"],
-                "token_uri": st.secrets["token_uri"],
-                "auth_provider_x509_cert_url": st.secrets["auth_provider_x509_cert_url"],
-                "client_x509_cert_url": st.secrets["client_x509_cert_url"],
-                "universe_domain": st.secrets.get("universe_domain", "googleapis.com")
-            }
-            credentials = service_account.Credentials.from_service_account_info(info)
-            return firestore.Client(credentials=credentials)
-        except Exception as e:
-            st.error(f"Firestore hiba: {e}")
-            return None
-    return None
-
+# --- ADATBÁZIS ÉS JELSZÓ INICIALIZÁLÁS ---
 db = get_db_client()
+ADMIN_PASSWORD = get_admin_password()
 
 st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
-
-# --- BIZTONSÁGOS ADMIN JELSZÓ KEZELÉS (Streamlit Secrets-ből) ---
-ADMIN_PASSWORD = st.secrets.get("ADMIN_PASSWORD", "alapertelmezett_vedelem_ha_nincs_beallitva")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -68,7 +42,7 @@ def save_gep_setting(gep_nev, adatok):
 
 all_settings = load_all_settings()
 
-# --- URL PARAMÉTEREK FIGYELÉSE (Idő átvétel az SVG kalkulátorból) ---
+# --- URL PARAMÉTEREK FIGYELÉSE ---
 query_params = st.query_params
 default_gtime = 5.0
 if "gtime" in query_params:
@@ -77,7 +51,7 @@ if "gtime" in query_params:
     except:
         pass
 
-# --- MENÜ ÉS ADMIN VEZÉRLÉS AZ OLDALSÁVBAN ---
+# --- MENÜ ÉS ADMIN VEZÉRLÉS ---
 st.sidebar.title("Műhely Vezérlő")
 menu_options = ["Költség Kalkulátor", "SVG Időbecslő"]
 if st.session_state.logged_in:
@@ -111,7 +85,6 @@ if page == "Költség Kalkulátor":
         with tab_obj:
             current_gep_data = all_settings.get(gep_nev, {})
             
-            # Alapárak szerkesztése CSAK BEJELENTKEZVE LÁTSZIK
             if st.session_state.logged_in:
                 with st.expander(f"Alapárak és rezsi szerkesztése ({gep_nev})"):
                     c1, c2, c3 = st.columns(3)
@@ -135,7 +108,6 @@ if page == "Költség Kalkulátor":
 
             st.divider()
 
-            # Aktuális értékek a számításhoz a háttérből
             m_val = float(current_gep_data.get("material", 0.006))
             l_val = float(current_gep_data.get("lazer", 0.0))
             p_val = float(current_gep_data.get("power", 0.0))
@@ -155,9 +127,8 @@ if page == "Költség Kalkulátor":
                 use_paint = st.checkbox("Festés / Koptatás kell?", key=f"upai{key_s}")
                 paint_multiplier = 1
                 if use_paint:
-                    paint_multiplier = st.number_input("Festés szorzó (pl. réteg vagy darab)", min_value=1, value=1, key=f"pmulti{key_s}")
+                    paint_multiplier = st.number_input("Festés szorzó", min_value=1, value=1, key=f"pmulti{key_s}")
 
-            # Költségszámítás
             area = width * height
             cost_material = area * m_val
             cost_machine = (l_val + p_val + w_val) * runtime
@@ -168,19 +139,16 @@ if page == "Költség Kalkulátor":
                 cost_extra += (area * pai_val * paint_multiplier)
 
             total_netto = (cost_material + cost_machine + cost_extra)
-            total_with_margin = total_netto * 1.10  # 10% felár
+            total_with_margin = total_netto * 1.10
             calculated_unit_price = round(total_with_margin / pcs) if pcs > 0 else 0
 
             st.subheader(f"Javasolt eladási ár: {calculated_unit_price} Ft / db")
-
-            # Kiajánlott ár alapértelmezetten a kalkulált árat jeleníti meg
             suggested_price = st.number_input("Kiajánlott ár (Ft / db)", value=int(calculated_unit_price), key=f"sugg_{key_s}")
 
-            # Mentés gomb CSAK bejelentkezve látszik
             if st.session_state.logged_in:
                 if st.button("Mentés az Archívumba", key=f"final_save_{key_s}", use_container_width=True):
                     if not db:
-                        st.error("Nincs kapcsolat az adatbázissal! (Ellenőrizd a Streamlit Secrets-et)")
+                        st.error("Nincs kapcsolat az adatbázissal!")
                     elif not t_name or not t_name.strip():
                         st.error("Add meg a termék nevét a mentéshez!")
                     else:
@@ -210,7 +178,6 @@ elif page == "SVG Időbecslő":
         v_raster = st.number_input("Fekete sebesség (Raszter) [mm/s]", value=300)
         dpi = st.number_input("Felbontás (DPI)", value=254)
         scan_gap_mm = 25.4 / dpi if dpi > 0 else 0.1
-        st.caption(f"Kalkulált sorköz: {round(scan_gap_mm, 4)} mm")
         st.divider()
         v_blue = st.number_input("Kék sebesség (Vektor) [mm/s]", value=25)
         v_red = st.number_input("Piros sebesség (Vektor) [mm/s]", value=20)
@@ -229,7 +196,6 @@ elif page == "SVG Időbecslő":
                     if unit == 'cm': p_w *= 10
                     elif unit == 'pt': p_w *= 0.3527
                     scaling = p_w / float(vb_match.group(1))
-                st.caption(f"Skálázás: {round(scaling, 4)}x")
             except: 
                 pass
 
@@ -269,23 +235,14 @@ elif page == "SVG Időbecslő":
 
                 t_b = (b_len / v_blue) * 1.15 / 60 if v_blue > 0 else 0
                 t_r = (r_len / v_red) * 1.15 / 60 if v_red > 0 else 0
-                total = t_b + t_r + t_rast
-                total_rounded = round(total, 2)
+                total = round(t_b + t_r + t_rast, 2)
 
-                st.success(f"Becsült idő: {total_rounded} perc")
-                st.metric("Összesen", f"{total_rounded} p")
-                
-                c1, c2, c3 = st.columns(3)
-                c1.write(f"Kék: {round(b_len)}mm")
-                c2.write(f"Piros: {round(r_len)}mm")
-                c3.write(f"Raszter: {round(t_rast, 2)}p")
-                
-                st.divider()
-                st.link_button("IDŐ ÁTVÉTELE A KALKULÁTORBA", f"/?gtime={total_rounded}")
+                st.success(f"Becsült idő: {total} perc")
+                st.link_button("IDŐ ÁTVÉTELE A KALKULÁTORBA", f"/?gtime={total}")
             except Exception as e:
                 st.error(f"Hiba az SVG elemzésekor: {e}")
 
-# --- 3. OLDAL: ARCHÍVUM ÉS TÖRLÉS (Csak admin látja) ---
+# --- 3. OLDAL: ARCHÍVUM ---
 elif page == "Archívum" and st.session_state.logged_in:
     st.title("Központi Archívum")
     if db:
@@ -302,41 +259,26 @@ elif page == "Archívum" and st.session_state.logged_in:
                     "Gép": v.get('gep'),
                     "Termék": v.get('termek'),
                     "Darabszám": v.get('darabszam', 1),
-                    "Számított Ár (Ft/db)": v.get('szamitott_ar', v.get('ar', 0)),
-                    "Kiajánlott Ár (Ft/db)": v.get('kiajanlott_ar', v.get('ar', 0))
+                    "Számított Ár (Ft/db)": v.get('szamitott_ar', 0),
+                    "Kiajánlott Ár (Ft/db)": v.get('kiajanlott_ar', 0)
                 })
             
             if res:
                 df_arch = pd.DataFrame(res)
                 df_display = df_arch.drop(columns=["id"])
-                
                 st.dataframe(df_display, use_container_width=True)
                 
-                st.divider()
-                st.subheader("Elemek törlése azonosító alapján")
                 selected_to_delete = st.multiselect(
-                    "Válaszd ki a törölni kívánt termékeket:",
-                    options=[f"{row['id']} | {row['Dátum']} - {row['Gép']} - {row['Termék']} ({row['Kiajánlott Ár (Ft/db)']} Ft)" for row in res]
+                    "Törlendő elemek kijelölése:",
+                    options=[f"{row['id']} | {row['Dátum']} - {row['Gép']} - {row['Termék']}" for row in res]
                 )
                 
-                if selected_to_delete:
-                    if st.button("Véglegesen törlöm a kiválasztottakat", type="primary"):
-                        for item in selected_to_delete:
-                            doc_id = item.split(" | ")[0]
-                            db.collection("kalkulaciok").document(doc_id).delete()
-                        st.success("A kiválasztott elemek törölve lettek az archívumból!")
-                        st.rerun()
-
-                st.divider()
-                csv_data = df_display.to_csv(index=False, encoding="utf-8-sig")
-                st.download_button(
-                    label="Archívum letöltése CSV-ben",
-                    data=csv_data,
-                    file_name=f"kalkulacio_archivum_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-                    mime="text/csv",
-                    use_container_width=True
-                )
+                if selected_to_delete and st.button("Kiválasztottak törlése", type="primary"):
+                    for item in selected_to_delete:
+                        db.collection("kalkulaciok").document(item.split(" | ")[0]).delete()
+                    st.success("Törölve!")
+                    st.rerun()
             else:
-                st.info("Még nincsenek mentett kalkulációk.")
+                st.info("Nincsenek mentett adatok.")
         except Exception as e:
-            st.warning(f"Hiba az archívum betöltésekor: {e}")
+            st.warning(f"Hiba: {e}")
