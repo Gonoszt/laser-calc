@@ -1,5 +1,4 @@
 import streamlit as st
-import json
 from google.cloud import firestore
 from google.oauth2 import service_account
 
@@ -8,24 +7,23 @@ def get_admin_password():
 
 def get_db_client():
     try:
-        # Ellenőrizzük, hogy létezik-e a gcp_json a secrets-ben
-        if "gcp_json" in st.secrets:
-            raw_gcp = st.secrets["gcp_json"]
-            
-            # Ha a Streamlit már dict-ként értelmezte
-            if isinstance(raw_gcp, dict):
-                info = raw_gcp
-            # Ha stringként érkezett be
-            else:
-                info = json.loads(str(raw_gcp))
-        else:
-            st.error("A 'gcp_json' hiányzik a Streamlit Secrets-ből!")
-            return None
+        info = {
+            "type": st.secrets.get("type", "service_account"),
+            "project_id": st.secrets.get("project_id"),
+            "private_key_id": st.secrets.get("private_key_id"),
+            "private_key": st.secrets.get("private_key"),
+            "client_email": st.secrets.get("client_email"),
+            "client_id": st.secrets.get("client_id"),
+            "auth_uri": st.secrets.get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
+            "token_uri": st.secrets.get("token_uri", "https://oauth2.googleapis.com/token"),
+            "auth_provider_x509_cert_url": st.secrets.get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
+            "client_x509_cert_url": st.secrets.get("client_x509_cert_url"),
+            "universe_domain": st.secrets.get("universe_domain", "googleapis.com")
+        }
 
-        # Biztosítjuk a privát kulcs helyes sorszüneteit
-        if "private_key" in info and info["private_key"]:
-            # Ha esetleg dupla vagy szimpla \\n maradt benne, normalizáljuk
-            info["private_key"] = info["private_key"].replace("\\n", "\n")
+        if not info["project_id"] or not info["client_email"] or not info["private_key"]:
+            st.error("Hiányosak az adatbázis beállítások a Streamlit Secrets-ben!")
+            return None
 
         credentials = service_account.Credentials.from_service_account_info(info)
         return firestore.Client(credentials=credentials)
