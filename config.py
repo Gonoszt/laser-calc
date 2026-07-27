@@ -7,13 +7,22 @@ def get_admin_password():
     return st.secrets.get("ADMIN_PASSWORD", "alapertelmezett_vedelem")
 
 def get_db_client():
-    # Megnézzük, hogy a gcp_json-t vagy a darabolt mezőket használjuk-e
     try:
+        # Megnézzük, hogy létezik-e a gcp_json a secrets-ben
         if "gcp_json" in st.secrets:
-            raw_json = st.secrets["gcp_json"]
-            info = dict(raw_json) if hasattr(raw_json, "items") else json.loads(raw_json)
+            raw_gcp = st.secrets["gcp_json"]
+            
+            # Ha a Streamlit már szótárként adta át
+            if isinstance(raw_gcp, dict):
+                info = raw_gcp
+            # Ha szöveges/JSON formátumú stringként érkezett
+            elif isinstance(raw_gcp, str):
+                info = json.loads(raw_gcp)
+            else:
+                # Ha valamilyen Streamlit Secret proxy objektum
+                info = dict(raw_gcp)
+                
         elif "project_id" in st.secrets:
-            # Ha külön mezőkként vannak benne, gyűjtsük össze szótárba
             info = {
                 "type": st.secrets.get("type"),
                 "project_id": st.secrets.get("project_id"),
@@ -28,9 +37,10 @@ def get_db_client():
                 "universe_domain": st.secrets.get("universe_domain", "googleapis.com")
             }
         else:
+            st.error("Nincs megfelelő adatbázis konfiguráció a Secrets-ben!")
             return None
 
-        # Ha a privát kulcsban escaped \n karakterek vannak, valódi sortöréssé alakítjuk
+        # A privát kulcsban lévő escaped sorjelek kezelése
         if "private_key" in info and info["private_key"]:
             info["private_key"] = info["private_key"].replace("\\n", "\n")
 
