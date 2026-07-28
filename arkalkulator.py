@@ -12,7 +12,7 @@ import re
 CALC_DATA_FILE = "kalkulaciok_archivum.csv"
 SETTINGS_FILE = "gep_beallitasok.csv"
 
-st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
+st.set_page_config(page_title="Melus & SK Profi Kalkulátor", layout="wide")
 
 # --- ADATKEZELÉS (Betöltés/Mentés) ---
 def load_settings():
