@@ -211,7 +211,7 @@ if page == "Költség Kalkulátor":
                 cost_extra += (area * pai_val * paint_multiplier)
 
             total_netto = cost_material + cost_machine + cost_extra
-            total_with_margin = total_netto * 1.10
+            total_with_margin = total_netto * 1.11
             calculated_unit_price = round(total_with_margin / pcs) if pcs > 0 else 0
 
             st.subheader(f"Javasolt eladási ár: {calculated_unit_price} Ft / db")
