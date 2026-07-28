@@ -366,4 +366,4 @@ elif page == "Archívum" and st.session_state.logged_in:
                 st.info("Nincsenek mentett adatok.")
         except Exception as e:
             st.warning(f"Hiba: {e}")
-```[cite: 2]
+[cite: 2]
