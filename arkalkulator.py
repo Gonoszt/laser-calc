@@ -22,6 +22,21 @@ if "logged_in" not in st.session_state:
 
 # --- BEÁLLÍTÁSOK KEZELÉSE (Függvények definiálása) ---
 def load_all_settings():
+    # --- DIAGNOSZTIKA A KÉPERNYŐN ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("Státusz Ellenőrző")
+if db is not None:
+    st.sidebar.success("Firestore kapcsolat: OK")
+    try:
+        test_doc = db.collection("beallitasok").document("gepek").get()
+        if test_doc.exists:
+            st.sidebar.success("Adatbázis dokumentum: Ltezik")
+        else:
+            st.sidebar.warning("A 'beallitasok/gepek' még nincs a Firestore-ban!")
+    except Exception as e:
+        st.sidebar.error(fOlvasási hiba: {e})
+else:
+    st.sidebar.error("Firestore kapcsolat: HIBA (db = None)")
     defaults = {
         "Kis Lézer": {
             "lazer": 0.8,
