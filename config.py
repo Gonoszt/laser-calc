@@ -14,8 +14,14 @@ def get_db_client():
             return None
     return _db
 
+import streamlit as st
+
 def get_admin_password():
     try:
-        return st.secrets["ADMIN_PASSWORD"]
-    except Exception:
-        return None
+        # Kiolvassuk a secret-et
+        pwd = st.secrets["ADMIN_PASSWORD"]
+        return str(pwd).strip()
+    except Exception as e:
+        # Ha hibát dob, jelezzük a felületen, hogy miért nem éri el
+        st.sidebar.warning(f"Secrets olvasási hiba: {e}")
+        return "alapertelmezett_vedelem"
