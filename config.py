@@ -10,7 +10,7 @@ def get_db_client():
             cred = credentials.Certificate(st.secrets["firestore"])
             initialize_app(cred)
             _db = firestore.client()
-        except Exception as e:
+        except Exception:
             return None
     return _db
 
