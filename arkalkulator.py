@@ -20,7 +20,7 @@ st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# --- BEÁLLÍTÁSOK KEZELÉSE ---
+# --- BEÁLLÍTÁSOK KEZELÉSE (Függvények definiálása) ---
 def load_all_settings():
     defaults = {
         "Kis Lézer": {
@@ -49,30 +49,29 @@ def load_all_settings():
         },
     }
     if db is None:
-        st.sidebar.error("Figyelem: A db kliens értéke None (nincs Firestore kapcsolat)!")
         return defaults
     
     try:
         doc = db.collection("beallitasok").document("gepek").get()
         if doc.exists:
             return doc.to_dict()
-        else:
-            st.sidebar.info("A 'beallitasok/gepek' dokumentum még nem létezik a Firestore-ban. Alapértelmezetteket használok, amくまで el nem mented.")
-    except Exception as e:
-        st.sidebar.error(f"Firestore olvasási hiba: {e}")
-        
+    except Exception:
+        pass
     return defaults
 
 
 def save_gep_setting(gep_nev, adatok):
-    if db is None:
-        st.error("Nem tudok menteni, mert a db kliens None (nincs kapcsolat)!")
+    if not db:
+        st.error("Nem tudok menteni, mert nincs Firestore kapcsolat.")
         return
     try:
         db.collection("beallitasok").document("gepek").set({gep_nev: adatok}, merge=True)
-        st.success(f"Sikeres mentés a Firestore-ba: {gep_nev}!")
+        st.success(f"Sikeres mentés: {gep_nev} beállításai frissítve!")
     except Exception as e:
-        st.error(f"Hiba a Firestore mentés során: {e}")
+        st.error(f"Hiba a beállítások mentésekor: {e}")
+
+# --- ITT TÖRTÉNIK AZ ADATOK BETÖLTÉSE (ez hiányzott vagy futott rossz sorrendben) ---
+all_settings = load_all_settings()
 
 # --- URL PARAMÉTEREK FIGYELÉSE ---
 query_params = st.query_params
