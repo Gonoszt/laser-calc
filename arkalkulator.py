@@ -50,7 +50,7 @@ with st.sidebar.expander("🔐 Admin belépés"):
     admin_pw = st.text_input("Admin jelszó", type="password")
     if st.button("Belépés"):
         # IDE ÍRD A SAJÁT JELSZÓT VAGY HASZNÁLD st.secrets["ADMIN_PASSWORD"]
-        if admin_pw == "admin123":
+        if admin_pw == st.secrets["ADMIN_PASSWORD"]:
             st.session_state["admin_ok"] = True
             st.success("Admin mód aktiválva.")
         else:
