@@ -1,5 +1,3 @@
 streamlit
-pandas
-svgpathtools
+firebase-admin
 google-cloud-firestore
-google-auth
