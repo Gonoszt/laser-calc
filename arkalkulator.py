@@ -20,23 +20,8 @@ st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# --- BEÁLLÍTÁSOK KEZELÉSE (Függvények definiálása) ---
+# --- BEÁLLÍTÁSOK KEZELÉSE ---
 def load_all_settings():
-    # --- DIAGNOSZTIKA A KÉPERNYŐN ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("Státusz Ellenőrző")
-if db is not None:
-    st.sidebar.success("Firestore kapcsolat: OK")
-    try:
-        test_doc = db.collection("beallitasok").document("gepek").get()
-        if test_doc.exists:
-            st.sidebar.success("Adatbázis dokumentum: Ltezik")
-        else:
-            st.sidebar.warning("A 'beallitasok/gepek' még nincs a Firestore-ban!")
-    except Exception as e:
-        st.sidebar.error(fOlvasási hiba: {e})
-else:
-    st.sidebar.error("Firestore kapcsolat: HIBA (db = None)")
     defaults = {
         "Kis Lézer": {
             "lazer": 0.8,
@@ -85,7 +70,25 @@ def save_gep_setting(gep_nev, adatok):
     except Exception as e:
         st.error(f"Hiba a beállítások mentésekor: {e}")
 
-# --- ITT TÖRTÉNIK AZ ADATOK BETÖLTÉSE (ez hiányzott vagy futott rossz sorrendben) ---
+
+# --- DIAGNOSZTIKA A KÉPERNYŐN (Függvényeken kívül, teljesen balra igazítva) ---
+st.sidebar.markdown("---")
+st.sidebar.subheader("Státusz Ellenőrző")
+if db is not None:
+    st.sidebar.success("Firestore kapcsolat: OK")
+    try:
+        test_doc = db.collection("beallitasok").document("gepek").get()
+        if test_doc.exists:
+            st.sidebar.success("Adatbázis dokumentum: Létezik")
+        else:
+            st.sidebar.warning("A 'beallitasok/gepek' még nincs a Firestore-ban!")
+    except Exception as e:
+        st.sidebar.error(f"Olvasási hiba: {e}")
+else:
+    st.sidebar.error("Firestore kapcsolat: HIBA (db = None)")
+
+
+# --- ADATOK BETÖLTÉSE ---
 all_settings = load_all_settings()
 
 # --- URL PARAMÉTEREK FIGYELÉSE ---
