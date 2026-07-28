@@ -48,28 +48,31 @@ def load_all_settings():
             "paint": 0.0,
         },
     }
-    if db:
-        try:
-            doc = db.collection("beallitasok").document("gepek").get()
-            if doc.exists:
-                return doc.to_dict()
-        except Exception:
-            st.warning("Nem sikerült beolvasni a beállításokat az adatbázisból.")
+    if db is None:
+        st.sidebar.error("Figyelem: A db kliens értéke None (nincs Firestore kapcsolat)!")
+        return defaults
+    
+    try:
+        doc = db.collection("beallitasok").document("gepek").get()
+        if doc.exists:
+            return doc.to_dict()
+        else:
+            st.sidebar.info("A 'beallitasok/gepek' dokumentum még nem létezik a Firestore-ban. Alapértelmezetteket használok, amくまで el nem mented.")
+    except Exception as e:
+        st.sidebar.error(f"Firestore olvasási hiba: {e}")
+        
     return defaults
 
 
 def save_gep_setting(gep_nev, adatok):
-    if not db:
-        st.error("Nem tudok menteni, mert nincs Firestore kapcsolat.")
+    if db is None:
+        st.error("Nem tudok menteni, mert a db kliens None (nincs kapcsolat)!")
         return
     try:
         db.collection("beallitasok").document("gepek").set({gep_nev: adatok}, merge=True)
-        st.success(f"Sikeres mentés: {gep_nev} beállításai frissítve!")
+        st.success(f"Sikeres mentés a Firestore-ba: {gep_nev}!")
     except Exception as e:
-        st.error(f"Hiba a beállítások mentésekor: {e}")
-
-
-all_settings = load_all_settings()
+        st.error(f"Hiba a Firestore mentés során: {e}")
 
 # --- URL PARAMÉTEREK FIGYELÉSE ---
 query_params = st.query_params
