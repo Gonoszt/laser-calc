@@ -223,13 +223,12 @@ if page == "Költség Kalkulátor":
                 key=f"sugg_{key_s}",
             )
             
-            # Mindig felfelé kerekítve 0-ra vagy 5-re a kiajánlott darabár is, ha módosítják
             suggested_unit_price = round_up_to_5_or_0(sugg_unit_raw)
             suggested_total_price = suggested_unit_price * pcs
 
             st.info(f"Rögzítendő kiajánlott adatok -> Darabár: {suggested_unit_price} Ft/db | Teljes ár: {suggested_total_price} Ft")
 
-            # Archiválás
+            # Archiválás (teljes adattartalom mentése)
             if st.session_state.logged_in:
                 if st.button("Mentés az Archívumba", key=f"final_save_{key_s}", use_container_width=True):
                     if not db:
@@ -243,13 +242,19 @@ if page == "Költség Kalkulátor":
                                     "datum": datetime.now(),
                                     "gep": gep_nev,
                                     "termek": t_name.strip(),
+                                    "szelesseg": width,
+                                    "magassag": height,
+                                    "gepido_perc": runtime,
                                     "darabszam": pcs,
+                                    "magnes_kell": use_magnet,
+                                    "festes_kell": use_paint,
+                                    "festes_szorzo": paint_multiplier,
                                     "szamitott_ar": calculated_unit_price,
                                     "kiajanlott_ar": suggested_unit_price,
                                     "teljes_ar": suggested_total_price,
                                 }
                             )
-                            st.success(f"'{t_name.strip()}' sikeresen archiválva!")
+                            st.success(f"'{t_name.strip()}' és minden paramétere sikeresen archiválva!")
                         except Exception as e:
                             st.error(f"Hiba történt a mentés során: {e}")
 
@@ -360,7 +365,12 @@ elif page == "Archívum" and st.session_state.logged_in:
                         "Dátum": dt_str,
                         "Gép": v.get("gep"),
                         "Termék": v.get("termek"),
+                        "Szélesség": v.get("szelesseg", 0),
+                        "Magasság": v.get("magassag", 0),
+                        "Gépidő (p)": v.get("gepido_perc", 0),
                         "Darabszám": pcs_val,
+                        "Mágnes": "Igen" if v.get("magnes_kell") else "Nem",
+                        "Festés": "Igen" if v.get("festes_kell") else "Nem",
                         "Számított Ár (Ft/db)": v.get("szamitott_ar", 0),
                         "Kiajánlott Ár (Ft/db)": sugg_u,
                         "Teljes Ár (Ft)": tot_p,
