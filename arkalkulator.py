@@ -42,7 +42,7 @@ def load_all_settings():
             "lazer": 2.92,
             "material": 0.01,
             "power": 7.0,
-            "work": 65.20,
+            "work": 62.50,
             "magnet": 0.0,
             "paint": 0.0,
         },
@@ -209,7 +209,7 @@ if page == "Költség Kalkulátor":
                 cost_extra += (area * pai_val * paint_multiplier)
 
             total_netto = cost_material + cost_machine + cost_extra
-            total_with_margin = total_netto * 1.11
+            total_with_margin = total_netto * 1.10
             
             calc_unit_raw = total_with_margin / pcs if pcs > 0 else 0
             calculated_unit_price = round_up_to_5_or_0(calc_unit_raw)
