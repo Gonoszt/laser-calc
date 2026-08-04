@@ -35,7 +35,7 @@ def load_all_settings():
             "lazer": 1.5,
             "material": 0.005,
             "power": 5.5,
-            "work": 25.0,
+            "work": 99.0,
             "magnet": 0.0,
             "paint": 0.0,
         },
