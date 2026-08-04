@@ -4,7 +4,6 @@ import re
 from datetime import datetime
 from google.cloud import firestore
 from config import get_db_client, get_admin_password
-import math
 
 # --- SVG elemzéshez szükséges könyvtár ---
 try:
@@ -21,12 +20,6 @@ st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# --- KEREKÍTŐ SEGÉDFÜGGVÉNY ---
-def round_up_to_5_or_0(val):
-    if val <= 0:
-        return 0
-    return int(math.ceil(val / 5.0) * 5)
-
 # --- BEÁLLÍTÁSOK KEZELÉSE ---
 def load_all_settings():
     defaults = {
@@ -39,10 +32,10 @@ def load_all_settings():
             "paint": 0.002,
         },
         "Nagy Lézer": {
-            "lazer": 2.92,
-            "material": 0.01,
-            "power": 7.0,
-            "work": 62.50,
+            "lazer": 1.5,
+            "material": 0.005,
+            "power": 5.5,
+            "work": 25.0,
             "magnet": 0.0,
             "paint": 0.0,
         },
@@ -209,24 +202,23 @@ if page == "Költség Kalkulátor":
                 cost_extra += (area * pai_val * paint_multiplier)
 
             total_netto = cost_material + cost_machine + cost_extra
-            total_with_margin = total_netto * 1.10
+            total_with_margin = total_netto * 1.11
             
-            calc_unit_raw = total_with_margin / pcs if pcs > 0 else 0
-            calculated_unit_price = round_up_to_5_or_0(calc_unit_raw)
+            calculated_unit_price = total_with_margin / pcs if pcs > 0 else 0
             calculated_total_price = calculated_unit_price * pcs
 
-            st.subheader(f"Számított darabár: {calculated_unit_price} Ft / db | Teljes ár: {calculated_total_price} Ft")
+            st.subheader(f"Számított darabár: {calculated_unit_price:.2f} Ft / db | Teljes ár: {calculated_total_price:.2f} Ft")
             
-            sugg_unit_raw = st.number_input(
+            suggested_unit_price = st.number_input(
                 "Kiajánlott darabár (Ft / db)",
-                value=int(calculated_unit_price),
+                value=float(calculated_unit_price),
+                format="%.2f",
                 key=f"sugg_{key_s}",
             )
             
-            suggested_unit_price = round_up_to_5_or_0(sugg_unit_raw)
             suggested_total_price = suggested_unit_price * pcs
 
-            st.info(f"Rögzítendő kiajánlott adatok -> Darabár: {suggested_unit_price} Ft/db | Teljes ár: {suggested_total_price} Ft")
+            st.info(f"Rögzítendő kiajánlott adatok -> Darabár: {suggested_unit_price:.2f} Ft/db | Teljes ár: {suggested_total_price:.2f} Ft")
 
             # Archiválás (teljes adattartalom mentése)
             if st.session_state.logged_in:
@@ -371,9 +363,9 @@ elif page == "Archívum" and st.session_state.logged_in:
                         "Darabszám": pcs_val,
                         "Mágnes": "Igen" if v.get("magnes_kell") else "Nem",
                         "Festés": "Igen" if v.get("festes_kell") else "Nem",
-                        "Számított Ár (Ft/db)": v.get("szamitott_ar", 0),
-                        "Kiajánlott Ár (Ft/db)": sugg_u,
-                        "Teljes Ár (Ft)": tot_p,
+                        "Számított Ár (Ft/db)": round(v.get("szamitott_ar", 0), 2),
+                        "Kiajánlott Ár (Ft/db)": round(sugg_u, 2),
+                        "Teljes Ár (Ft)": round(tot_p, 2),
                     }
                 )
 
