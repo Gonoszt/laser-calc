@@ -20,38 +20,13 @@ st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# --- BEÁLLÍTÁSOK KEZELÉSE ---
+# --- BEÁLLÍTÁSOK KEZELÉSE KIZÁRÓLAG AZ ADATBÁZISBÓL ---
 def load_all_settings():
-    # Alapértelmezett értékek a megadott pontos képletek alapján
-    # Anyag: 8000 / (750 * 1500) = 0.0071111...
-    # Lézer amort: 350000 / (2000 * 60) = 2.91667...
-    # Áram: (70 * 6) / 60 = 7.0
-    # Munkadíj: 600000 Ft bruttó havi / percekre bontva
+    # Üres alapértelmezések, hogy ne legyenek kódba égetett üzleti adatok
     defaults = {
-        "Kis Lézer": {
-            "lazer": 350000 / (2000 * 60),
-            "material": 8000 / (750 * 1500),
-            "power": (70 * 6) / 60,
-            "work": 62.5,
-            "magnet": 30.0,
-            "paint": 0.0,
-        },
-        "Nagy Lézer": {
-            "lazer": 350000 / (2000 * 60),
-            "material": 8000 / (750 * 1500),
-            "power": (70 * 6) / 60,
-            "work": 62.5,
-            "magnet": 30.0,
-            "paint": 0.0,
-        },
-        "3D Nyomtatás": {
-            "lazer": 0.0,
-            "material": 15.0,
-            "power": (70 * 6) / 60,
-            "work": 62.5,
-            "magnet": 0.0,
-            "paint": 0.0,
-        },
+        "Kis Lézer": {"lazer": 0.0, "material": 0.0, "power": 0.0, "work": 0.0, "magnet": 0.0, "paint": 0.0},
+        "Nagy Lézer": {"lazer": 0.0, "material": 0.0, "power": 0.0, "work": 0.0, "magnet": 0.0, "paint": 0.0},
+        "3D Nyomtatás": {"lazer": 0.0, "material": 0.0, "power": 0.0, "work": 0.0, "magnet": 0.0, "paint": 0.0},
     }
     if db:
         try:
@@ -69,7 +44,7 @@ def save_gep_setting(gep_nev, adatok):
         return
     try:
         db.collection("beallitasok").document("gepek").set({gep_nev: adatok}, merge=True)
-        st.success(f"Sikeres mentés: {gep_nev} beállításai frissítve!")
+        st.success(f"Sikeres mentés: {gep_nev} beállításai frissítve az adatbázisban!")
     except Exception as e:
         st.error(f"Hiba a beállítások mentésekor: {e}")
 
@@ -119,25 +94,25 @@ if page == "Költség Kalkulátor":
         with tab_obj:
             current_gep_data = all_settings.get(gep_nev, {})
 
-            # Admin beállítás szerkesztés
+            # Admin beállítás szerkesztés (Csak bejelentkezve látszik és módosítható)
             if st.session_state.logged_in:
-                with st.expander(f"Alapárak és rezsi szerkesztése ({gep_nev})"):
+                with st.expander(f"🔒 Alapárak és rezsi szerkesztése ({gep_nev}) - Csak Admin"):
                     c1, c2, c3 = st.columns(3)
                     l_val = c1.number_input(
                         "Lézer amort. (Ft/p)",
-                        value=float(current_gep_data.get("lazer", 2.9167)),
+                        value=float(current_gep_data.get("lazer", 0.0)),
                         format="%.4f",
                         key=f"l_{key_s}",
                     )
                     m_val = c2.number_input(
                         "Anyag alapár (Ft/mm²)",
-                        value=float(current_gep_data.get("material", 8000 / (750 * 1500))),
+                        value=float(current_gep_data.get("material", 0.0)),
                         format="%.6f",
                         key=f"m_{key_s}",
                     )
                     p_val = c3.number_input(
                         "Áram (Ft/p)",
-                        value=float(current_gep_data.get("power", 7.0)),
+                        value=float(current_gep_data.get("power", 0.0)),
                         format="%.4f",
                         key=f"pw_{key_s}",
                     )
@@ -145,13 +120,13 @@ if page == "Költség Kalkulátor":
                     c4, c5, c6 = st.columns(3)
                     w_val = c4.number_input(
                         "Munkadíj (Ft/p)",
-                        value=float(current_gep_data.get("work", 62.5)),
+                        value=float(current_gep_data.get("work", 0.0)),
                         format="%.4f",
                         key=f"w_{key_s}",
                     )
                     mag_val = c5.number_input(
                         "Mágnes ára (Ft/db)",
-                        value=float(current_gep_data.get("magnet", 30.0)),
+                        value=float(current_gep_data.get("magnet", 0.0)),
                         key=f"mag_{key_s}",
                     )
                     pai_val = c6.number_input(
@@ -161,7 +136,7 @@ if page == "Költség Kalkulátor":
                         key=f"pai_{key_s}",
                     )
 
-                    if st.button(f"Mentés minden eszközre ({gep_nev})", key=f"btn_save_{key_s}"):
+                    if st.button(f"Mentés az adatbázisba ({gep_nev})", key=f"btn_save_{key_s}"):
                         new_set = {
                             "lazer": l_val,
                             "material": m_val,
@@ -172,15 +147,17 @@ if page == "Költség Kalkulátor":
                         }
                         save_gep_setting(gep_nev, new_set)
                         st.rerun()
+            else:
+                st.info("💡 Az alapárak és rezsik módosításához jelentkezz be az oldalsávban adminisztrátorként.")
 
             st.divider()
 
-            # Aktuális értékek betöltése
-            m_val = float(current_gep_data.get("material", 8000 / (750 * 1500)))
-            l_val = float(current_gep_data.get("lazer", 350000 / (2000 * 60)))
-            p_val = float(current_gep_data.get("power", (70 * 6) / 60))
-            w_val = float(current_gep_data.get("work", 62.5))
-            mag_val = float(current_gep_data.get("magnet", 30.0))
+            # Paraméterek betöltése az adatbázisból
+            m_val = float(current_gep_data.get("material", 0.0))
+            l_val = float(current_gep_data.get("lazer", 0.0))
+            p_val = float(current_gep_data.get("power", 0.0))
+            w_val = float(current_gep_data.get("work", 0.0))
+            mag_val = float(current_gep_data.get("magnet", 0.0))
             pai_val = float(current_gep_data.get("paint", 0.0))
 
             col_a, col_b = st.columns(2)
@@ -200,26 +177,19 @@ if page == "Költség Kalkulátor":
                         "Festés szorzó", min_value=1, value=1, key=f"pmulti{key_s}"
                     )
 
-            # Számítási logika:
-            # 1. Alapanyagköltség = terület * mm2 ár
+            # Számítási logika a megadott pontos egyenletek szerint:
             area = width * height
             cost_material = area * m_val
-            
-            # 2. Gravírozás ára = (amortizáció + áram + munkadíj) * gépidő
             cost_machine = (l_val + p_val + w_val) * runtime
             
-            # 3. Extrák
             cost_extra = 0
             if use_magnet:
                 cost_extra += mag_val
             if use_paint:
                 cost_extra += (area * pai_val * paint_multiplier)
 
-            # 4. Nettó összesen (alapanyag + gravírozás + extrák)
             total_netto = cost_material + cost_machine + cost_extra
-            
-            # 5. Bruttó ár 10%-os ráhagyással (jatt / marzs)
-            total_with_margin = total_netto * 1.10
+            total_with_margin = total_netto * 1.10  # 10% ráhagyás
             
             calculated_unit_price = total_with_margin / pcs if pcs > 0 else 0
             calculated_total_price = calculated_unit_price * pcs
@@ -237,7 +207,7 @@ if page == "Költség Kalkulátor":
 
             st.info(f"Rögzítendő kiajánlott adatok -> Darabár: {suggested_unit_price:.2f} Ft/db | Teljes ár: {suggested_total_price:.2f} Ft")
 
-            # Archiválás (teljes adattartalom mentése)
+            # Archiválás
             if st.session_state.logged_in:
                 if st.button("Mentés az Archívumba", key=f"final_save_{key_s}", use_container_width=True):
                     if not db:
