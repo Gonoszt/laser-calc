@@ -4,6 +4,7 @@ import re
 from datetime import datetime
 from google.cloud import firestore
 from config import get_db_client, get_admin_password
+import math
 
 # --- SVG elemzéshez szükséges könyvtár ---
 try:
@@ -20,6 +21,12 @@ st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
+# --- KEREKÍTŐ SEGÉDFÜGGVÉNY ---
+def round_up_to_5_or_0(val):
+    if val <= 0:
+        return 0
+    return int(math.ceil(val / 5.0) * 5)
+
 # --- BEÁLLÍTÁSOK KEZELÉSE ---
 def load_all_settings():
     defaults = {
@@ -35,7 +42,7 @@ def load_all_settings():
             "lazer": 1.5,
             "material": 0.005,
             "power": 5.5,
-            "work": 99.0,
+            "work": 25.0,
             "magnet": 0.0,
             "paint": 0.0,
         },
@@ -48,15 +55,13 @@ def load_all_settings():
             "paint": 0.0,
         },
     }
-    if db is None:
-        return defaults
-    
-    try:
-        doc = db.collection("beallitasok").document("gepek").get()
-        if doc.exists:
-            return doc.to_dict()
-    except Exception:
-        pass
+    if db:
+        try:
+            doc = db.collection("beallitasok").document("gepek").get()
+            if doc.exists:
+                return doc.to_dict()
+        except Exception:
+            st.warning("Nem sikerült beolvasni a beállításokat az adatbázisból.")
     return defaults
 
 
@@ -71,24 +76,6 @@ def save_gep_setting(gep_nev, adatok):
         st.error(f"Hiba a beállítások mentésekor: {e}")
 
 
-# --- DIAGNOSZTIKA A KÉPERNYŐN (Függvényeken kívül, teljesen balra igazítva) ---
-st.sidebar.markdown("---")
-st.sidebar.subheader("Státusz Ellenőrző")
-if db is not None:
-    st.sidebar.success("Firestore kapcsolat: OK")
-    try:
-        test_doc = db.collection("beallitasok").document("gepek").get()
-        if test_doc.exists:
-            st.sidebar.success("Adatbázis dokumentum: Létezik")
-        else:
-            st.sidebar.warning("A 'beallitasok/gepek' még nincs a Firestore-ban!")
-    except Exception as e:
-        st.sidebar.error(f"Olvasási hiba: {e}")
-else:
-    st.sidebar.error("Firestore kapcsolat: HIBA (db = None)")
-
-
-# --- ADATOK BETÖLTÉSE ---
 all_settings = load_all_settings()
 
 # --- URL PARAMÉTEREK FIGYELÉSE ---
@@ -223,14 +210,24 @@ if page == "Költség Kalkulátor":
 
             total_netto = cost_material + cost_machine + cost_extra
             total_with_margin = total_netto * 1.11
-            calculated_unit_price = round(total_with_margin / pcs) if pcs > 0 else 0
+            
+            calc_unit_raw = total_with_margin / pcs if pcs > 0 else 0
+            calculated_unit_price = round_up_to_5_or_0(calc_unit_raw)
+            calculated_total_price = calculated_unit_price * pcs
 
-            st.subheader(f"Javasolt eladási ár: {calculated_unit_price} Ft / db")
-            suggested_price = st.number_input(
-                "Kiajánlott ár (Ft / db)",
+            st.subheader(f"Számított darabár: {calculated_unit_price} Ft / db | Teljes ár: {calculated_total_price} Ft")
+            
+            sugg_unit_raw = st.number_input(
+                "Kiajánlott darabár (Ft / db)",
                 value=int(calculated_unit_price),
                 key=f"sugg_{key_s}",
             )
+            
+            # Mindig felfelé kerekítve 0-ra vagy 5-re a kiajánlott darabár is, ha módosítják
+            suggested_unit_price = round_up_to_5_or_0(sugg_unit_raw)
+            suggested_total_price = suggested_unit_price * pcs
+
+            st.info(f"Rögzítendő kiajánlott adatok -> Darabár: {suggested_unit_price} Ft/db | Teljes ár: {suggested_total_price} Ft")
 
             # Archiválás
             if st.session_state.logged_in:
@@ -248,7 +245,8 @@ if page == "Költség Kalkulátor":
                                     "termek": t_name.strip(),
                                     "darabszam": pcs,
                                     "szamitott_ar": calculated_unit_price,
-                                    "kiajanlott_ar": suggested_price,
+                                    "kiajanlott_ar": suggested_unit_price,
+                                    "teljes_ar": suggested_total_price,
                                 }
                             )
                             st.success(f"'{t_name.strip()}' sikeresen archiválva!")
@@ -352,15 +350,20 @@ elif page == "Archívum" and st.session_state.logged_in:
                 v = d.to_dict()
                 dt_val = v.get("datum")
                 dt_str = dt_val.strftime("%Y-%m-%d %H:%M") if hasattr(dt_val, "strftime") else str(dt_val)
+                pcs_val = v.get("darabszam", 1)
+                sugg_u = v.get("kiajanlott_ar", 0)
+                tot_p = v.get("teljes_ar", sugg_u * pcs_val)
+                
                 res.append(
                     {
                         "id": d.id,
                         "Dátum": dt_str,
                         "Gép": v.get("gep"),
                         "Termék": v.get("termek"),
-                        "Darabszám": v.get("darabszam", 1),
+                        "Darabszám": pcs_val,
                         "Számított Ár (Ft/db)": v.get("szamitott_ar", 0),
-                        "Kiajánlott Ár (Ft/db)": v.get("kiajanlott_ar", 0),
+                        "Kiajánlott Ár (Ft/db)": sugg_u,
+                        "Teljes Ár (Ft)": tot_p,
                     }
                 )
 
