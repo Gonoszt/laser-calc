@@ -22,28 +22,33 @@ if "logged_in" not in st.session_state:
 
 # --- BEÁLLÍTÁSOK KEZELÉSE ---
 def load_all_settings():
+    # Alapértelmezett értékek a megadott pontos képletek alapján
+    # Anyag: 8000 / (750 * 1500) = 0.0071111...
+    # Lézer amort: 350000 / (2000 * 60) = 2.91667...
+    # Áram: (70 * 6) / 60 = 7.0
+    # Munkadíj: 600000 Ft bruttó havi / percekre bontva
     defaults = {
         "Kis Lézer": {
-            "lazer": 0.8,
-            "material": 0.005,
-            "power": 4.6,
-            "work": 25.0,
-            "magnet": 150.0,
-            "paint": 0.002,
+            "lazer": 350000 / (2000 * 60),
+            "material": 8000 / (750 * 1500),
+            "power": (70 * 6) / 60,
+            "work": 62.5,
+            "magnet": 30.0,
+            "paint": 0.0,
         },
         "Nagy Lézer": {
-            "lazer": 1.5,
-            "material": 0.005,
-            "power": 5.5,
-            "work": 25.0,
-            "magnet": 0.0,
+            "lazer": 350000 / (2000 * 60),
+            "material": 8000 / (750 * 1500),
+            "power": (70 * 6) / 60,
+            "work": 62.5,
+            "magnet": 30.0,
             "paint": 0.0,
         },
         "3D Nyomtatás": {
             "lazer": 0.0,
             "material": 15.0,
-            "power": 1.2,
-            "work": 25.0,
+            "power": (70 * 6) / 60,
+            "work": 62.5,
             "magnet": 0.0,
             "paint": 0.0,
         },
@@ -120,36 +125,39 @@ if page == "Költség Kalkulátor":
                     c1, c2, c3 = st.columns(3)
                     l_val = c1.number_input(
                         "Lézer amort. (Ft/p)",
-                        value=float(current_gep_data.get("lazer", 0.0)),
+                        value=float(current_gep_data.get("lazer", 2.9167)),
+                        format="%.4f",
                         key=f"l_{key_s}",
                     )
                     m_val = c2.number_input(
                         "Anyag alapár (Ft/mm²)",
-                        value=float(current_gep_data.get("material", 0.0)),
-                        format="%.4f",
+                        value=float(current_gep_data.get("material", 8000 / (750 * 1500))),
+                        format="%.6f",
                         key=f"m_{key_s}",
                     )
                     p_val = c3.number_input(
                         "Áram (Ft/p)",
-                        value=float(current_gep_data.get("power", 0.0)),
+                        value=float(current_gep_data.get("power", 7.0)),
+                        format="%.4f",
                         key=f"pw_{key_s}",
                     )
 
                     c4, c5, c6 = st.columns(3)
                     w_val = c4.number_input(
                         "Munkadíj (Ft/p)",
-                        value=float(current_gep_data.get("work", 25.0)),
+                        value=float(current_gep_data.get("work", 62.5)),
+                        format="%.4f",
                         key=f"w_{key_s}",
                     )
                     mag_val = c5.number_input(
                         "Mágnes ára (Ft/db)",
-                        value=float(current_gep_data.get("magnet", 0.0)),
+                        value=float(current_gep_data.get("magnet", 30.0)),
                         key=f"mag_{key_s}",
                     )
                     pai_val = c6.number_input(
                         "Festés egységár (Ft/mm²)",
                         value=float(current_gep_data.get("paint", 0.0)),
-                        format="%.4f",
+                        format="%.6f",
                         key=f"pai_{key_s}",
                     )
 
@@ -167,12 +175,12 @@ if page == "Költség Kalkulátor":
 
             st.divider()
 
-            # Aktuális értékek
-            m_val = float(current_gep_data.get("material", 0.006))
-            l_val = float(current_gep_data.get("lazer", 0.0))
-            p_val = float(current_gep_data.get("power", 0.0))
-            w_val = float(current_gep_data.get("work", 25.0))
-            mag_val = float(current_gep_data.get("magnet", 0.0))
+            # Aktuális értékek betöltése
+            m_val = float(current_gep_data.get("material", 8000 / (750 * 1500)))
+            l_val = float(current_gep_data.get("lazer", 350000 / (2000 * 60)))
+            p_val = float(current_gep_data.get("power", (70 * 6) / 60))
+            w_val = float(current_gep_data.get("work", 62.5))
+            mag_val = float(current_gep_data.get("magnet", 30.0))
             pai_val = float(current_gep_data.get("paint", 0.0))
 
             col_a, col_b = st.columns(2)
@@ -192,17 +200,26 @@ if page == "Költség Kalkulátor":
                         "Festés szorzó", min_value=1, value=1, key=f"pmulti{key_s}"
                     )
 
+            # Számítási logika:
+            # 1. Alapanyagköltség = terület * mm2 ár
             area = width * height
             cost_material = area * m_val
+            
+            # 2. Gravírozás ára = (amortizáció + áram + munkadíj) * gépidő
             cost_machine = (l_val + p_val + w_val) * runtime
+            
+            # 3. Extrák
             cost_extra = 0
             if use_magnet:
                 cost_extra += mag_val
             if use_paint:
                 cost_extra += (area * pai_val * paint_multiplier)
 
+            # 4. Nettó összesen (alapanyag + gravírozás + extrák)
             total_netto = cost_material + cost_machine + cost_extra
-            total_with_margin = total_netto * 1.11
+            
+            # 5. Bruttó ár 10%-os ráhagyással (jatt / marzs)
+            total_with_margin = total_netto * 1.10
             
             calculated_unit_price = total_with_margin / pcs if pcs > 0 else 0
             calculated_total_price = calculated_unit_price * pcs
