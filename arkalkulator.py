@@ -223,7 +223,6 @@ if page == "Költség Kalkulátor":
                 key=f"sugg_{key_s}",
             )
             
-            # Mindig felfelé kerekítve 0-ra vagy 5-re a kiajánlott darabár is, ha módosítják
             suggested_unit_price = round_up_to_5_or_0(sugg_unit_raw)
             suggested_total_price = suggested_unit_price * pcs
 
