@@ -1,13 +1,7 @@
 import streamlit as st
 from google.cloud import firestore
 from google.oauth2 import service_account
-
-def get_admin_password():
-    try:
-        pwd = st.secrets["ADMIN_PASSWORD"]
-        return str(pwd).strip()
-    except Exception:
-        return "alapertelmezett_vedelem"
+import base64
 
 def get_db_client():
     try:
@@ -15,12 +9,14 @@ def get_db_client():
             st.error("HIBA: A 'firestore' kulcs hiányzik a Streamlit Secrets-ből!")
             return None
 
-        # A secretsből beolvasott Firestore service account adatok
+        # BASE64-ből visszaalakítás
+        private_key_raw = base64.b64decode(st.secrets["firestore"]["private_key_b64"]).decode("utf-8")
+
         info = {
             "type": st.secrets["firestore"]["type"],
             "project_id": st.secrets["firestore"]["project_id"],
             "private_key_id": st.secrets["firestore"]["private_key_id"],
-            "private_key": st.secrets["firestore"]["private_key"],
+            "private_key": private_key_raw,
             "client_email": st.secrets["firestore"]["client_email"],
             "client_id": st.secrets["firestore"]["client_id"],
             "auth_uri": st.secrets["firestore"]["auth_uri"],
@@ -30,20 +26,13 @@ def get_db_client():
             "universe_domain": st.secrets["firestore"]["universe_domain"],
         }
 
-        # Hitelesítés
         credentials = service_account.Credentials.from_service_account_info(info)
+        db = firestore.Client(project=info["project_id"], credentials=credentials)
 
-        # Firestore kliens létrehozása
-        db = firestore.Client(
-            project=info["project_id"],
-            credentials=credentials
-        )
-
-        # Diagnosztika
         st.write("DB client:", db)
 
         return db
 
     except Exception as e:
-        st.error(f"Részletes kapcsolódási hiba a config.py-ban: {e}")
+        st.error(f"Hiba a Firestore kapcsolódásnál: {e}")
         return None
