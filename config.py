@@ -6,7 +6,7 @@ def get_admin_password():
     try:
         pwd = st.secrets["ADMIN_PASSWORD"]
         return str(pwd).strip()
-    except Exception as e:
+    except Exception:
         return "alapertelmezett_vedelem"
 
 def get_db_client():
@@ -16,23 +16,23 @@ def get_db_client():
             return None
 
         info = {
-            "type": st.secrets["firestore"].get("type", "service_account"),
-            "project_id": st.secrets["firestore"].get("project_id"),
-            "private_key_id": st.secrets["firestore"].get("private_key_id"),
-            "private_key": st.secrets["firestore"].get("private_key"),
-            "client_email": st.secrets["firestore"].get("client_email"),
-            "client_id": st.secrets["firestore"].get("client_id"),
-            "auth_uri": st.secrets["firestore"].get("auth_uri", "https://accounts.google.com/o/oauth2/auth"),
-            "token_uri": st.secrets["firestore"].get("token_uri", "https://oauth2.googleapis.com/token"),
-            "auth_provider_x509_cert_url": st.secrets["firestore"].get("auth_provider_x509_cert_url", "https://www.googleapis.com/oauth2/v1/certs"),
-            "client_x509_cert_url": st.secrets["firestore"].get("client_x509_cert_url"),
-            "universe_domain": st.secrets["firestore"].get("universe_domain", "googleapis.com")
+            "type": st.secrets["firestore"]["type"],
+            "project_id": st.secrets["firestore"]["project_id"],
+            "private_key_id": st.secrets["firestore"]["private_key_id"],
+            "private_key": st.secrets["firestore"]["private_key"],
+            "client_email": st.secrets["firestore"]["client_email"],
+            "client_id": st.secrets["firestore"]["client_id"],
+            "auth_uri": st.secrets["firestore"]["auth_uri"],
+            "token_uri": st.secrets["firestore"]["token_uri"],
+            "auth_provider_x509_cert_url": st.secrets["firestore"]["auth_provider_x509_cert_url"],
+            "client_x509_cert_url": st.secrets["firestore"]["client_x509_cert_url"],
+            "universe_domain": st.secrets["firestore"]["universe_domain"],
         }
 
         credentials = service_account.Credentials.from_service_account_info(info)
-        db = firestore.Client(credentials=credentials)
+        db = firestore.Client(credentials=credentials, project=info["project_id"])
 
-        # 🔥 IDE KELL TENNI A DIAGNOSZTIKÁT
+        # 🔥 Diagnosztika – ezt látod majd a Streamlit tetején
         st.write("DB client:", db)
 
         return db
