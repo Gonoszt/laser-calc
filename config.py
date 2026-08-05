@@ -15,6 +15,7 @@ def get_db_client():
             st.error("HIBA: A 'firestore' kulcs hiányzik a Streamlit Secrets-ből!")
             return None
 
+        # A secretsből beolvasott Firestore service account adatok
         info = {
             "type": st.secrets["firestore"]["type"],
             "project_id": st.secrets["firestore"]["project_id"],
@@ -29,10 +30,16 @@ def get_db_client():
             "universe_domain": st.secrets["firestore"]["universe_domain"],
         }
 
+        # Hitelesítés
         credentials = service_account.Credentials.from_service_account_info(info)
-        db = firestore.Client(credentials=credentials, project=info["project_id"])
 
-        # 🔥 Diagnosztika – ezt látod majd a Streamlit tetején
+        # Firestore kliens létrehozása
+        db = firestore.Client(
+            project=info["project_id"],
+            credentials=credentials
+        )
+
+        # Diagnosztika
         st.write("DB client:", db)
 
         return db
