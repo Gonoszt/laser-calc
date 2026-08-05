@@ -11,7 +11,6 @@ def get_admin_password():
 
 def get_db_client():
     try:
-        # Megnézzük, hogy létezik-e egyáltalán a firestoti kulcs a secrets-ben
         if "firestore" not in st.secrets:
             st.error("HIBA: A 'firestore' kulcs hiányzik a Streamlit Secrets-ből!")
             return None
@@ -31,8 +30,13 @@ def get_db_client():
         }
 
         credentials = service_account.Credentials.from_service_account_info(info)
-        return firestore.Client(credentials=credentials)
-        
+        db = firestore.Client(credentials=credentials)
+
+        # 🔥 IDE KELL TENNI A DIAGNOSZTIKÁT
+        st.write("DB client:", db)
+
+        return db
+
     except Exception as e:
         st.error(f"Részletes kapcsolódási hiba a config.py-ban: {e}")
         return None
