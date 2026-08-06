@@ -15,7 +15,7 @@ def get_db_client():
         try:
             app = get_app()
         except ValueError:
-            cred = credentials.Certificate(st.secrets["firestore"])
+            cred = credentials.Certificate(dict(st.secrets["firestore"]))
             app = initialize_app(cred)
         return firestore.client(app)
     except Exception as e:
