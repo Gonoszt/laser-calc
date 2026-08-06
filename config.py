@@ -1,38 +1,33 @@
 import streamlit as st
-from google.cloud import firestore
-from google.oauth2 import service_account
-import base64
+from firebase_admin import credentials, firestore, initialize_app, get_app
 
+
+@st.cache_resource
 def get_db_client():
+    """
+    Firestore kliens inicializálása.
+    @st.cache_resource biztosítja, hogy ez CSAK EGYSZER fusson le
+    az app teljes életciklusa alatt (minden felhasználó ugyanazt a
+    kapcsolatot használja), és megvédi a firebase_admin-t az
+    "app already exists" hibától reruns / több session esetén.
+    """
     try:
-        if "firestore" not in st.secrets:
-            st.error("HIBA: A 'firestore' kulcs hiányzik a Streamlit Secrets-ből!")
-            return None
-
-        # BASE64-ből visszaalakítás
-        private_key_raw = base64.b64decode(st.secrets["firestore"]["private_key_b64"]).decode("utf-8")
-
-        info = {
-            "type": st.secrets["firestore"]["type"],
-            "project_id": st.secrets["firestore"]["project_id"],
-            "private_key_id": st.secrets["firestore"]["private_key_id"],
-            "private_key": private_key_raw,
-            "client_email": st.secrets["firestore"]["client_email"],
-            "client_id": st.secrets["firestore"]["client_id"],
-            "auth_uri": st.secrets["firestore"]["auth_uri"],
-            "token_uri": st.secrets["firestore"]["token_uri"],
-            "auth_provider_x509_cert_url": st.secrets["firestore"]["auth_provider_x509_cert_url"],
-            "client_x509_cert_url": st.secrets["firestore"]["client_x509_cert_url"],
-            "universe_domain": st.secrets["firestore"]["universe_domain"],
-        }
-
-        credentials = service_account.Credentials.from_service_account_info(info)
-        db = firestore.Client(project=info["project_id"], credentials=credentials)
-
-        st.write("DB client:", db)
-
-        return db
-
+        try:
+            app = get_app()
+        except ValueError:
+            cred = credentials.Certificate(st.secrets["firestore"])
+            app = initialize_app(cred)
+        return firestore.client(app)
     except Exception as e:
-        st.error(f"Hiba a Firestore kapcsolódásnál: {e}")
+        st.sidebar.warning(f"Firestore kapcsolódási hiba: {e}")
         return None
+
+
+@st.cache_data(ttl=3600)
+def get_admin_password():
+    try:
+        pwd = st.secrets["ADMIN_PASSWORD"]
+        return str(pwd).strip()
+    except Exception as e:
+        st.sidebar.warning(f"Secrets olvasási hiba: {e}")
+        return "alapertelmezett_vedelem"
