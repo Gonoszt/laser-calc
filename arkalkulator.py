@@ -3,7 +3,9 @@ import pandas as pd
 import re
 from datetime import datetime
 from google.cloud import firestore
+from streamlit_autorefresh import st_autorefresh
 from config import get_db_client, get_admin_password
+from realtime import start_listeners, get_gepek, get_kalkulaciok
 
 # --- SVG elemzéshez szükséges könyvtár ---
 try:
@@ -20,14 +22,57 @@ st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 
-# --- BEÁLLÍTÁSOK KEZELÉSE KIZÁRÓLAG AZ ADATBÁZISBÓL ---
+# --- VALÓS IDEJŰ LISTENEREK INDÍTÁSA (csak egyszer fut le az egész app életében) ---
+if db:
+    start_listeners(db)
+    # Az app minden 3 másodpercben újrarendereli magát, hogy a háttérben
+    # frissült (listener által frissített) adatot megjelenítse.
+    # Ha zavaróan gyakori lenne gépelés közben, nyugodtan vedd feljebb (pl. 5000-10000 ms-re).
+    st_autorefresh(interval=3000, key="rt_refresh")
+
+DEFAULT_SETTINGS = {
+    "Kis Lézer": {
+        "lazer": 0.8,
+        "material": 0.005,
+        "power": 4.6,
+        "work": 25.0,
+        "magnet": 150.0,
+        "paint": 0.002,
+    },
+    "Nagy Lézer": {
+        "lazer": 1.5,
+        "material": 0.005,
+        "power": 5.5,
+        "work": 25.0,
+        "magnet": 0.0,
+        "paint": 0.0,
+    },
+    "3D Nyomtatás": {
+        "lazer": 0.0,
+        "material": 15.0,
+        "power": 1.2,
+        "work": 25.0,
+        "magnet": 0.0,
+        "paint": 0.0,
+    },
+}
+
+
 def load_all_settings():
-    # Üres alapértelmezések, hogy ne legyenek kódba égetett üzleti adatok
-    defaults = {
-        "Kis Lézer": {"lazer": 0.0, "material": 0.0, "power": 0.0, "work": 0.0, "magnet": 0.0, "paint": 0.0},
-        "Nagy Lézer": {"lazer": 0.0, "material": 0.0, "power": 0.0, "work": 0.0, "magnet": 0.0, "paint": 0.0},
-        "3D Nyomtatás": {"lazer": 0.0, "material": 0.0, "power": 0.0, "work": 0.0, "magnet": 0.0, "paint": 0.0},
-    }
+    """
+    Elsőként a valós idejű (listener által frissen tartott) cache-ből próbál olvasni.
+    Ha még nem érkezett adat a listenertől (pl. app épp most indult el), visszaesik
+    egy közvetlen Firestore olvasásra, ez pedig a végső esetben az alapértelmezettekre.
+    """
+    live = get_gepek()
+    if live is not None:
+        # hiányzó gépeket/kulcsokat pótoljuk az alapértelmezettekkel
+        merged = {k: dict(v) for k, v in DEFAULT_SETTINGS.items()}
+        for gep_nev, adatok in live.items():
+            merged.setdefault(gep_nev, {})
+            merged[gep_nev].update(adatok)
+        return merged
+
     if db:
         try:
             doc = db.collection("beallitasok").document("gepek").get()
@@ -35,7 +80,7 @@ def load_all_settings():
                 return doc.to_dict()
         except Exception:
             st.warning("Nem sikerült beolvasni a beállításokat az adatbázisból.")
-    return defaults
+    return DEFAULT_SETTINGS
 
 
 def save_gep_setting(gep_nev, adatok):
@@ -44,7 +89,7 @@ def save_gep_setting(gep_nev, adatok):
         return
     try:
         db.collection("beallitasok").document("gepek").set({gep_nev: adatok}, merge=True)
-        st.success(f"Sikeres mentés: {gep_nev} beállításai frissítve az adatbázisban!")
+        st.success(f"Sikeres mentés: {gep_nev} beállításai frissítve!")
     except Exception as e:
         st.error(f"Hiba a beállítások mentésekor: {e}")
 
@@ -94,34 +139,31 @@ if page == "Költség Kalkulátor":
         with tab_obj:
             current_gep_data = all_settings.get(gep_nev, {})
 
-            # Admin beállítás szerkesztés (Csak bejelentkezve látszik és módosítható)
+            # Admin beállítás szerkesztés
             if st.session_state.logged_in:
-                with st.expander(f"🔒 Alapárak és rezsi szerkesztése ({gep_nev}) - Csak Admin"):
+                with st.expander(f"Alapárak és rezsi szerkesztése ({gep_nev})"):
                     c1, c2, c3 = st.columns(3)
                     l_val = c1.number_input(
                         "Lézer amort. (Ft/p)",
                         value=float(current_gep_data.get("lazer", 0.0)),
-                        format="%.4f",
                         key=f"l_{key_s}",
                     )
                     m_val = c2.number_input(
                         "Anyag alapár (Ft/mm²)",
                         value=float(current_gep_data.get("material", 0.0)),
-                        format="%.6f",
+                        format="%.4f",
                         key=f"m_{key_s}",
                     )
                     p_val = c3.number_input(
                         "Áram (Ft/p)",
                         value=float(current_gep_data.get("power", 0.0)),
-                        format="%.4f",
                         key=f"pw_{key_s}",
                     )
 
                     c4, c5, c6 = st.columns(3)
                     w_val = c4.number_input(
                         "Munkadíj (Ft/p)",
-                        value=float(current_gep_data.get("work", 0.0)),
-                        format="%.4f",
+                        value=float(current_gep_data.get("work", 25.0)),
                         key=f"w_{key_s}",
                     )
                     mag_val = c5.number_input(
@@ -132,11 +174,11 @@ if page == "Költség Kalkulátor":
                     pai_val = c6.number_input(
                         "Festés egységár (Ft/mm²)",
                         value=float(current_gep_data.get("paint", 0.0)),
-                        format="%.6f",
+                        format="%.4f",
                         key=f"pai_{key_s}",
                     )
 
-                    if st.button(f"Mentés az adatbázisba ({gep_nev})", key=f"btn_save_{key_s}"):
+                    if st.button(f"Mentés minden eszközre ({gep_nev})", key=f"btn_save_{key_s}"):
                         new_set = {
                             "lazer": l_val,
                             "material": m_val,
@@ -147,16 +189,14 @@ if page == "Költség Kalkulátor":
                         }
                         save_gep_setting(gep_nev, new_set)
                         st.rerun()
-            else:
-                st.info("💡 Az alapárak és rezsik módosításához jelentkezz be az oldalsávban adminisztrátorként.")
 
             st.divider()
 
-            # Paraméterek betöltése az adatbázisból
-            m_val = float(current_gep_data.get("material", 0.0))
+            # Aktuális értékek
+            m_val = float(current_gep_data.get("material", 0.006))
             l_val = float(current_gep_data.get("lazer", 0.0))
             p_val = float(current_gep_data.get("power", 0.0))
-            w_val = float(current_gep_data.get("work", 0.0))
+            w_val = float(current_gep_data.get("work", 25.0))
             mag_val = float(current_gep_data.get("magnet", 0.0))
             pai_val = float(current_gep_data.get("paint", 0.0))
 
@@ -177,11 +217,9 @@ if page == "Költség Kalkulátor":
                         "Festés szorzó", min_value=1, value=1, key=f"pmulti{key_s}"
                     )
 
-            # Számítási logika a megadott pontos egyenletek szerint:
             area = width * height
             cost_material = area * m_val
             cost_machine = (l_val + p_val + w_val) * runtime
-            
             cost_extra = 0
             if use_magnet:
                 cost_extra += mag_val
@@ -189,23 +227,15 @@ if page == "Költség Kalkulátor":
                 cost_extra += (area * pai_val * paint_multiplier)
 
             total_netto = cost_material + cost_machine + cost_extra
-            total_with_margin = total_netto * 1.10  # 10% ráhagyás
-            
-            calculated_unit_price = total_with_margin / pcs if pcs > 0 else 0
-            calculated_total_price = calculated_unit_price * pcs
+            total_with_margin = total_netto * 1.11
+            calculated_unit_price = round(total_with_margin / pcs) if pcs > 0 else 0
 
-            st.subheader(f"Számított darabár: {calculated_unit_price:.2f} Ft / db | Teljes ár: {calculated_total_price:.2f} Ft")
-            
-            suggested_unit_price = st.number_input(
-                "Kiajánlott darabár (Ft / db)",
-                value=float(calculated_unit_price),
-                format="%.2f",
+            st.subheader(f"Javasolt eladási ár: {calculated_unit_price} Ft / db")
+            suggested_price = st.number_input(
+                "Kiajánlott ár (Ft / db)",
+                value=int(calculated_unit_price),
                 key=f"sugg_{key_s}",
             )
-            
-            suggested_total_price = suggested_unit_price * pcs
-
-            st.info(f"Rögzítendő kiajánlott adatok -> Darabár: {suggested_unit_price:.2f} Ft/db | Teljes ár: {suggested_total_price:.2f} Ft")
 
             # Archiválás
             if st.session_state.logged_in:
@@ -221,19 +251,12 @@ if page == "Költség Kalkulátor":
                                     "datum": datetime.now(),
                                     "gep": gep_nev,
                                     "termek": t_name.strip(),
-                                    "szelesseg": width,
-                                    "magassag": height,
-                                    "gepido_perc": runtime,
                                     "darabszam": pcs,
-                                    "magnes_kell": use_magnet,
-                                    "festes_kell": use_paint,
-                                    "festes_szorzo": paint_multiplier,
                                     "szamitott_ar": calculated_unit_price,
-                                    "kiajanlott_ar": suggested_unit_price,
-                                    "teljes_ar": suggested_total_price,
+                                    "kiajanlott_ar": suggested_price,
                                 }
                             )
-                            st.success(f"'{t_name.strip()}' és minden paramétere sikeresen archiválva!")
+                            st.success(f"'{t_name.strip()}' sikeresen archiválva!")
                         except Exception as e:
                             st.error(f"Hiba történt a mentés során: {e}")
 
@@ -322,37 +345,39 @@ elif page == "Archívum" and st.session_state.logged_in:
     if not db:
         st.error("Firestore kapcsolat nem elérhető.")
     else:
+        # Valós idejű adat: a listener által frissen tartott cache-ből olvasunk,
+        # ez NEM indít újabb Firestore olvasást minden rerun-nál.
+        raw_docs = get_kalkulaciok()
+
+        # Ha a listener még nem futott le (pl. app épp most indult), essünk
+        # vissza egy közvetlen olvasásra, hogy sose maradjon üres a felület.
+        if not raw_docs:
+            try:
+                raw_docs = [
+                    {**d.to_dict(), "id": d.id}
+                    for d in db.collection("kalkulaciok")
+                    .order_by("datum", direction=firestore.Query.DESCENDING)
+                    .limit(100)
+                    .stream()
+                ]
+            except Exception as e:
+                st.warning(f"Hiba: {e}")
+                raw_docs = []
+
         try:
-            docs = list(
-                db.collection("kalkulaciok")
-                .order_by("datum", direction=firestore.Query.DESCENDING)
-                .limit(100)
-                .stream()
-            )
             res = []
-            for d in docs:
-                v = d.to_dict()
+            for v in raw_docs:
                 dt_val = v.get("datum")
                 dt_str = dt_val.strftime("%Y-%m-%d %H:%M") if hasattr(dt_val, "strftime") else str(dt_val)
-                pcs_val = v.get("darabszam", 1)
-                sugg_u = v.get("kiajanlott_ar", 0)
-                tot_p = v.get("teljes_ar", sugg_u * pcs_val)
-                
                 res.append(
                     {
-                        "id": d.id,
+                        "id": v.get("id"),
                         "Dátum": dt_str,
                         "Gép": v.get("gep"),
                         "Termék": v.get("termek"),
-                        "Szélesség": v.get("szelesseg", 0),
-                        "Magasság": v.get("magassag", 0),
-                        "Gépidő (p)": v.get("gepido_perc", 0),
-                        "Darabszám": pcs_val,
-                        "Mágnes": "Igen" if v.get("magnes_kell") else "Nem",
-                        "Festés": "Igen" if v.get("festes_kell") else "Nem",
-                        "Számított Ár (Ft/db)": round(v.get("szamitott_ar", 0), 2),
-                        "Kiajánlott Ár (Ft/db)": round(sugg_u, 2),
-                        "Teljes Ár (Ft)": round(tot_p, 2),
+                        "Darabszám": v.get("darabszam", 1),
+                        "Számított Ár (Ft/db)": v.get("szamitott_ar", 0),
+                        "Kiajánlott Ár (Ft/db)": v.get("kiajanlott_ar", 0),
                     }
                 )
 
