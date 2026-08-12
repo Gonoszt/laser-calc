@@ -239,7 +239,9 @@ if page == "Költség Kalkulátor":
             st.subheader(f"Javasolt eladási ár: {calculated_unit_price} Ft / db")
             suggested_price = st.number_input(
                 "Kiajánlott ár (Ft / db)",
-                value=int(calculated_unit_price),
+                value=None,
+                placeholder="Hagyd üresen, ha a számított ár érvényes",
+                min_value=0,
                 key=f"sugg_{key_s}",
             )
 
@@ -258,7 +260,38 @@ if page == "Költség Kalkulátor":
                                     "gep": gep_nev,
                                     "termek": t_name.strip(),
                                     "darabszam": pcs,
+                                    "meret": {
+                                        "szelesseg_mm": width,
+                                        "magassag_mm": height,
+                                        "terulet_mm2": area,
+                                    },
+                                    "gepido_perc": runtime,
+                                    "extra": {
+                                        "magnes": use_magnet,
+                                        "festes": use_paint,
+                                        "festes_szorzo": paint_multiplier if use_paint else None,
+                                    },
+                                    # A számításnál ténylegesen használt gépi alapárak pillanatképe -
+                                    # így később is visszakereshető, milyen árazással készült a kalkuláció,
+                                    # akkor is ha az admin időközben módosítja az alapbeállításokat.
+                                    "gep_parameterek": {
+                                        "lazer": l_val,
+                                        "material": m_val,
+                                        "power": p_val,
+                                        "work": w_val,
+                                        "magnet": mag_val,
+                                        "paint": pai_val,
+                                    },
+                                    "koltsegek": {
+                                        "anyag": round(cost_material, 2),
+                                        "gep": round(cost_machine, 2),
+                                        "extra": round(cost_extra, 2),
+                                        "netto_osszesen": round(total_netto, 2),
+                                        "brutto_margoval": round(total_with_margin, 2),
+                                    },
                                     "szamitott_ar": calculated_unit_price,
+                                    # Ha üresen maradt a mező, None-t mentünk - ez azt jelenti,
+                                    # hogy nem lett külön kiajánlott ár megadva, a számított ár érvényes.
                                     "kiajanlott_ar": suggested_price,
                                 }
                             )
@@ -375,15 +408,34 @@ elif page == "Archívum" and st.session_state.logged_in:
             for v in raw_docs:
                 dt_val = v.get("datum")
                 dt_str = dt_val.strftime("%Y-%m-%d %H:%M") if hasattr(dt_val, "strftime") else str(dt_val)
+
+                # .get(..., {}) mindenhol: a régebbi, e bővítés előtt mentett rekordoknál
+                # ezek a mezők még nem léteznek, így nem szabad hibát dobniuk.
+                meret = v.get("meret", {})
+                extra = v.get("extra", {})
+                koltsegek = v.get("koltsegek", {})
+                kiajanlott = v.get("kiajanlott_ar")
+
                 res.append(
                     {
                         "id": v.get("id"),
                         "Dátum": dt_str,
                         "Gép": v.get("gep"),
                         "Termék": v.get("termek"),
+                        "Méret (mm)": (
+                            f"{meret.get('szelesseg_mm')}×{meret.get('magassag_mm')}"
+                            if meret
+                            else "-"
+                        ),
+                        "Gépidő (p)": v.get("gepido_perc", "-"),
                         "Darabszám": v.get("darabszam", 1),
+                        "Mágnes": "igen" if extra.get("magnes") else "-",
+                        "Festés": "igen" if extra.get("festes") else "-",
+                        "Anyagköltség": koltsegek.get("anyag", "-"),
+                        "Gépköltség": koltsegek.get("gep", "-"),
+                        "Extra ktg": koltsegek.get("extra", "-"),
                         "Számított Ár (Ft/db)": v.get("szamitott_ar", 0),
-                        "Kiajánlott Ár (Ft/db)": v.get("kiajanlott_ar", 0),
+                        "Kiajánlott Ár (Ft/db)": kiajanlott if kiajanlott is not None else "-",
                     }
                 )
 
@@ -392,6 +444,21 @@ elif page == "Archívum" and st.session_state.logged_in:
                 df_display = df_arch.drop(columns=["id"])
                 st.dataframe(df_display, use_container_width=True)
 
+                st.divider()
+                st.subheader("Tétel részletei")
+                selected_detail = st.selectbox(
+                    "Válassz egy tételt a teljes adatok (pl. az adott gép akkori árbeállításai) megtekintéséhez:",
+                    options=[f"{row['id']} | {row['Dátum']} - {row['Gép']} - {row['Termék']}" for row in res],
+                    index=None,
+                    placeholder="Válassz tételt...",
+                )
+                if selected_detail:
+                    detail_id = selected_detail.split(" | ")[0]
+                    detail_doc = next((v for v in raw_docs if v.get("id") == detail_id), None)
+                    if detail_doc:
+                        st.json({k: v for k, v in detail_doc.items() if k != "id"})
+
+                st.divider()
                 selected_to_delete = st.multiselect(
                     "Törlendő elemek kijelölése:",
                     options=[f"{row['id']} | {row['Dátum']} - {row['Gép']} - {row['Termék']}" for row in res],
