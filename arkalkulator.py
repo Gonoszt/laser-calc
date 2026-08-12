@@ -245,6 +245,21 @@ if page == "Költség Kalkulátor":
                 key=f"sugg_{key_s}",
             )
 
+            # Az "érvényes" egységár: ha van kiajánlott ár, azt vesszük figyelembe,
+            # egyébként a rendszer által számítottat.
+            effective_unit_price = suggested_price if suggested_price is not None else calculated_unit_price
+            total_calculated_price = calculated_unit_price * pcs
+            total_effective_price = effective_unit_price * pcs
+
+            oc1, oc2 = st.columns(2)
+            oc1.metric("Egységár (érvényes)", f"{effective_unit_price:,.0f} Ft/db".replace(",", " "))
+            oc2.metric(f"Összesen ({pcs} db)", f"{total_effective_price:,.0f} Ft".replace(",", " "))
+            if suggested_price is not None and suggested_price != calculated_unit_price:
+                st.caption(
+                    f"Számított egységár alapján: {calculated_unit_price:,.0f} Ft/db "
+                    f"→ összesen {total_calculated_price:,.0f} Ft".replace(",", " ")
+                )
+
             # Archiválás
             if st.session_state.logged_in:
                 if st.button("Mentés az Archívumba", key=f"final_save_{key_s}", use_container_width=True):
@@ -293,6 +308,13 @@ if page == "Költség Kalkulátor":
                                     # Ha üresen maradt a mező, None-t mentünk - ez azt jelenti,
                                     # hogy nem lett külön kiajánlott ár megadva, a számított ár érvényes.
                                     "kiajanlott_ar": suggested_price,
+                                    "osszegzes": {
+                                        "egysegar_szamitott": calculated_unit_price,
+                                        "egysegar_kiajanlott": suggested_price,
+                                        "egysegar_vegleges": effective_unit_price,
+                                        "osszesen_szamitott": round(total_calculated_price, 2),
+                                        "osszesen_vegleges": round(total_effective_price, 2),
+                                    },
                                 }
                             )
                             st.success(f"'{t_name.strip()}' sikeresen archiválva!")
@@ -415,6 +437,13 @@ elif page == "Archívum" and st.session_state.logged_in:
                 extra = v.get("extra", {})
                 koltsegek = v.get("koltsegek", {})
                 kiajanlott = v.get("kiajanlott_ar")
+                osszegzes = v.get("osszegzes", {})
+                # Régi (bővítés előtti) rekordoknál nincs "osszegzes" mező -
+                # ilyenkor a darabszám × számított egységár alapján számolunk fallback összeget.
+                osszesen_ft = osszegzes.get(
+                    "osszesen_vegleges",
+                    v.get("szamitott_ar", 0) * v.get("darabszam", 1),
+                )
 
                 res.append(
                     {
@@ -434,8 +463,9 @@ elif page == "Archívum" and st.session_state.logged_in:
                         "Anyagköltség": koltsegek.get("anyag", "-"),
                         "Gépköltség": koltsegek.get("gep", "-"),
                         "Extra ktg": koltsegek.get("extra", "-"),
-                        "Számított Ár (Ft/db)": v.get("szamitott_ar", 0),
+                        "Egységár (Ft/db)": v.get("szamitott_ar", 0),
                         "Kiajánlott Ár (Ft/db)": kiajanlott if kiajanlott is not None else "-",
+                        "Összesen (Ft)": round(osszesen_ft, 0),
                     }
                 )
 
