@@ -146,17 +146,22 @@ if page == "Költség Kalkulátor":
                     l_val = c1.number_input(
                         "Lézer amort. (Ft/p)",
                         value=float(current_gep_data.get("lazer", 0.0)),
+                        format="%.5f",
+                        step=0.00001,
                         key=f"l_{key_s}",
                     )
                     m_val = c2.number_input(
                         "Anyag alapár (Ft/mm²)",
                         value=float(current_gep_data.get("material", 0.0)),
-                        format="%.4f",
+                        format="%.5f",
+                        step=0.00001,
                         key=f"m_{key_s}",
                     )
                     p_val = c3.number_input(
                         "Áram (Ft/p)",
                         value=float(current_gep_data.get("power", 0.0)),
+                        format="%.5f",
+                        step=0.00001,
                         key=f"pw_{key_s}",
                     )
 
@@ -174,7 +179,8 @@ if page == "Költség Kalkulátor":
                     pai_val = c6.number_input(
                         "Festés egységár (Ft/mm²)",
                         value=float(current_gep_data.get("paint", 0.0)),
-                        format="%.4f",
+                        format="%.5f",
+                        step=0.00001,
                         key=f"pai_{key_s}",
                     )
 
