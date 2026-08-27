@@ -17,7 +17,7 @@ except ImportError:
 db = get_db_client()
 ADMIN_PASSWORD = get_admin_password()
 
-st.set_page_config(page_title="Melus & SK Profi Kalkulátor", layout="wide")
+st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
@@ -366,6 +366,8 @@ elif page == "SVG Időbecslő":
                 f.write(uploaded_file.getbuffer())
 
             try:
+                import time
+                t_start = time.perf_counter()
                 paths, attributes = svg2paths("temp.svg")
                 b_len, r_len, t_rast = 0.0, 0.0, 0.0
                 for path, attr in zip(paths, attributes):
@@ -394,8 +396,10 @@ elif page == "SVG Időbecslő":
                 t_b = (b_len / v_blue) * 1.15 / 60 if v_blue > 0 else 0
                 t_r = (r_len / v_red) * 1.15 / 60 if v_red > 0 else 0
                 total = round(t_b + t_r + t_rast, 2)
+                elapsed = time.perf_counter() - t_start
 
                 st.success(f"Becsült idő: {total} perc")
+                st.caption(f"Fájl feldolgozása: {elapsed:.2f} másodperc ({len(paths)} útvonal)")
                 st.link_button("IDŐ ÁTVÉTELE A KALKULÁTORBA", f"/?gtime={total}")
             except Exception as e:
                 st.error(f"Hiba az SVG elemzésekor: {e}")
