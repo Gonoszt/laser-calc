@@ -365,9 +365,7 @@ elif page == "SVG Időbecslő":
             with open("temp.svg", "wb") as f:
                 f.write(uploaded_file.getbuffer())
 
-            try:
-                import time
-                t_start = time.perf_counter()
+            def _process_svg():
                 paths, attributes = svg2paths("temp.svg")
                 b_len, r_len, t_rast = 0.0, 0.0, 0.0
                 for path, attr in zip(paths, attributes):
@@ -392,6 +390,27 @@ elif page == "SVG Időbecslő":
                             t_rast += ((h / scan_gap_mm) * (w + (2 * over)) / v_raster) / 60
                         except Exception:
                             pass
+                return b_len, r_len, t_rast, len(paths)
+
+            MAX_FELDOLGOZASI_IDO_MP = 30  # ha ennél tovább tartana, inkább hibát adunk, mint örök várakozást
+
+            try:
+                import time
+                import concurrent.futures
+
+                t_start = time.perf_counter()
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_process_svg)
+                    try:
+                        b_len, r_len, t_rast, path_count = future.result(timeout=MAX_FELDOLGOZASI_IDO_MP)
+                    except concurrent.futures.TimeoutError:
+                        st.error(
+                            f"A fájl feldolgozása túllépte a {MAX_FELDOLGOZASI_IDO_MP} másodperces "
+                            "időkorlátot - valószínűleg túl sok vagy túl bonyolult útvonalat tartalmaz. "
+                            "Próbáld egyszerűsíteni az SVG-t (kevesebb csomópont, egyszerűsített útvonalak), "
+                            "vagy darabold több kisebb fájlra."
+                        )
+                        st.stop()
 
                 t_b = (b_len / v_blue) * 1.15 / 60 if v_blue > 0 else 0
                 t_r = (r_len / v_red) * 1.15 / 60 if v_red > 0 else 0
@@ -399,7 +418,7 @@ elif page == "SVG Időbecslő":
                 elapsed = time.perf_counter() - t_start
 
                 st.success(f"Becsült idő: {total} perc")
-                st.caption(f"Fájl feldolgozása: {elapsed:.2f} másodperc ({len(paths)} útvonal)")
+                st.caption(f"Fájl feldolgozása: {elapsed:.2f} másodperc ({path_count} útvonal)")
                 st.link_button("IDŐ ÁTVÉTELE A KALKULÁTORBA", f"/?gtime={total}")
             except Exception as e:
                 st.error(f"Hiba az SVG elemzésekor: {e}")
