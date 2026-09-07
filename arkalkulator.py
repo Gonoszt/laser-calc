@@ -107,7 +107,7 @@ if "gtime" in query_params:
 
 # --- MENÜ ÉS ADMIN VEZÉRLÉS ---
 st.sidebar.title("Műhely Vezérlő")
-menu_options = ["Költség Kalkulátor", "SVG Időbecslő"]
+menu_options = ["Költség Kalkulátor", "SVG Időbecslő", "DXF Időbecslő"]
 if st.session_state.logged_in:
     menu_options.append("Archívum")
 
@@ -423,7 +423,120 @@ elif page == "SVG Időbecslő":
             except Exception as e:
                 st.error(f"Hiba az SVG elemzésekor: {e}")
 
-# --- 3. OLDAL: ARCHÍVUM ---
+# --- 3. OLDAL: DXF IDŐBECSLŐ ---
+elif page == "DXF Időbecslő":
+    st.title("DXF Időbecslő (CorelDraw export alapján)")
+    st.caption(
+        "Színkódolás: **piros vonal** (ACI 1) = vektor vágás/gravírozás, "
+        "**kék vonal** (ACI 5) = vektor gravírozás, "
+        "**minden más** (alapértelmezett rétegszín) = raszteres égetendő terület."
+    )
+    col1, col2 = st.columns([1, 2])
+
+    with col1:
+        d_v_raster = st.number_input("Fekete sebesség (Raszter) [mm/s]", value=300, key="dxf_vraster")
+        d_dpi = st.number_input("Felbontás (DPI)", value=254, key="dxf_dpi")
+        d_scan_gap_mm = 25.4 / d_dpi if d_dpi > 0 else 0.1
+        st.divider()
+        d_v_blue = st.number_input("Kék sebesség (Vektor) [mm/s]", value=25, key="dxf_vblue")
+        d_v_red = st.number_input("Piros sebesség (Vektor) [mm/s]", value=20, key="dxf_vred")
+        dxf_file = st.file_uploader("Válassz DXF fájlt", type=["dxf"], key="dxf_uploader")
+
+    with col2:
+        if dxf_file:
+            try:
+                import ezdxf
+                from ezdxf import bbox as ezdxf_bbox
+            except ImportError:
+                st.error(
+                    "Hiányzó csomag! A requirements.txt-be írd bele: ezdxf"
+                )
+                st.stop()
+
+            with open("temp_dxf.dxf", "wb") as f:
+                f.write(dxf_file.getbuffer())
+
+            def _entity_length(e):
+                """Egy DXF entitás valódi (görbe menti) hossza mm-ben."""
+                try:
+                    if e.dxftype() == "LINE":
+                        p1, p2 = e.dxf.start, e.dxf.end
+                        return ((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2) ** 0.5
+                    if hasattr(e, "flattening"):
+                        pts = list(e.flattening(0.05))
+                        return sum(
+                            ((pts[i].x - pts[i - 1].x) ** 2 + (pts[i].y - pts[i - 1].y) ** 2) ** 0.5
+                            for i in range(1, len(pts))
+                        )
+                except Exception:
+                    pass
+                return 0.0
+
+            def _process_dxf():
+                doc = ezdxf.readfile("temp_dxf.dxf")
+                msp = doc.modelspace()
+                layer_colors = {layer.dxf.name: layer.dxf.color for layer in doc.layers}
+
+                def resolve_color(e):
+                    c = e.dxf.color
+                    if c == 256:  # ByLayer - a réteg saját színét kell figyelembe venni
+                        return layer_colors.get(e.dxf.layer, 7)
+                    if c == 0:  # ByBlock - egyszerűsítésként alapszínnek vesszük
+                        return 7
+                    return c
+
+                b_len, r_len, t_rast = 0.0, 0.0, 0.0
+                count = 0
+                for e in msp:
+                    count += 1
+                    color = resolve_color(e)
+                    length = _entity_length(e)
+
+                    if color == 1:  # piros
+                        r_len += length
+                    elif color == 5:  # kék
+                        b_len += length
+                    else:  # minden egyéb szín = raszteres égetendő terület
+                        try:
+                            box = ezdxf_bbox.extents([e])
+                            w = box.extmax.x - box.extmin.x
+                            h = box.extmax.y - box.extmin.y
+                            over = d_v_raster * 0.05
+                            t_rast += ((h / d_scan_gap_mm) * (w + (2 * over)) / d_v_raster) / 60
+                        except Exception:
+                            pass
+                return b_len, r_len, t_rast, count
+
+            MAX_FELDOLGOZASI_IDO_MP = 30
+
+            try:
+                import time
+                import concurrent.futures
+
+                t_start = time.perf_counter()
+                with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+                    future = executor.submit(_process_dxf)
+                    try:
+                        b_len, r_len, t_rast, ent_count = future.result(timeout=MAX_FELDOLGOZASI_IDO_MP)
+                    except concurrent.futures.TimeoutError:
+                        st.error(
+                            f"A fájl feldolgozása túllépte a {MAX_FELDOLGOZASI_IDO_MP} másodperces "
+                            "időkorlátot - valószínűleg túl sok vagy túl bonyolult entitást tartalmaz."
+                        )
+                        st.stop()
+
+                t_b = (b_len / d_v_blue) * 1.15 / 60 if d_v_blue > 0 else 0
+                t_r = (r_len / d_v_red) * 1.15 / 60 if d_v_red > 0 else 0
+                total = round(t_b + t_r + t_rast, 2)
+                elapsed = time.perf_counter() - t_start
+
+                st.success(f"Becsült idő: {total} perc")
+                st.caption(f"Fájl feldolgozása: {elapsed:.2f} másodperc ({ent_count} entitás)")
+                st.link_button("IDŐ ÁTVÉTELE A KALKULÁTORBA", f"/?gtime={total}")
+            except Exception as e:
+                st.error(f"Hiba a DXF elemzésekor: {e}")
+
+# --- 4. OLDAL: ARCHÍVUM ---
 elif page == "Archívum" and st.session_state.logged_in:
     st.title("Központi Archívum")
     if not db:
