@@ -10,7 +10,7 @@ from realtime import start_listeners, get_gepek, get_kalkulaciok
 db = get_db_client()
 ADMIN_PASSWORD = get_admin_password()
 
-st.set_page_config(page_title="Melis & SK Profi Kalkulátor", layout="wide")
+st.set_page_config(page_title="Melus & SK Profi Kalkulátor", layout="wide")
 
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
