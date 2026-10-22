@@ -1,0 +1,7 @@
+streamlit
+firebase-admin
+google-cloud-firestore
+svgpathtools
+pandas
+streamlit-autorefresh
+ezdxf
